@@ -121,6 +121,10 @@ sqlStep stmt = sqlite3_step stmt >>= checkStatus
     {-# INLINE checkStatus #-}
 {-# INLINE sqlStep #-}
 
+sqlStep_ :: SqlStmt -> IO ()
+sqlStep_ stmt = sqlStep stmt >> return ()
+{-# INLINE sqlStep_ #-}
+
 foreign import ccall "sqlite3.h sqlite3_reset" sqlite3_reset
     :: SqlStmt -> IO SqlStatus
 

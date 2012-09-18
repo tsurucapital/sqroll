@@ -1,7 +1,9 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 module Database.Sqroll where
 
-import Control.Applicative
+import Control.Monad.Trans (MonadIO, liftIO)
 
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
@@ -10,55 +12,24 @@ class HasTable t where
     type HasTableM :: * -> *
     table :: NamedTable HasTableM t
 
-instance HasTable Person where
-    type HasTableM = IO
-    table = namedTable "people" $ Person
-        <$> field "name"    personName
-        <*> field "age"     personAge
-        <*> field "company" personCompany
+makeSqroll :: forall a. (HasTable a, MonadIO HasTableM)
+           => Sql -> IO (a -> HasTableM (ForeignKey a))
+makeSqroll sql = do
+    -- Create tables and indexes (if not exist...)
+    sqlExecute sql $ tableCreate table'
+    mapM_ (sqlExecute sql) $ tableIndexes table'
 
-fromForeignKey :: HasTable a => ForeignKey a -> HasTableM a
-fromForeignKey = undefined
+    -- Prepare an insert statement and a function to bind args
+    stmt <- sqlPrepare sql $ tableInsert table'
+    let poker = tablePoke table' stmt
 
-data Person = Person
-    { personName    :: String
-    , personAge     :: Int
-    , personCompany :: ForeignKey Int
-    } deriving (Show)
-
-personTable :: NamedTable IO Person
-personTable = table
-
-jasper :: Person
-jasper = Person "Jasper" 22 (SqlRowId 123)
-
-denis :: Person
-denis = Person "Denis" 24 (SqlRowId 1234)
-
-main :: IO ()
-main = do
-    sql <- sqlOpen "test.db"
-    sqlExecute sql $ tableCreate personTable
-    mapM_ (sqlExecute sql) $ tableIndexes personTable
-
-    stmt <- sqlPrepare sql $ tableInsert personTable
-    let binder = tablePoke personTable stmt
-
-    binder jasper
-    sqlStep stmt
-    sqlReset stmt
-
-    binder denis
-    sqlStep stmt
-
-    sqlFinalize stmt
-
-
-    query <- sqlPrepare sql $ tableSelect personTable
-    let peeker = tablePeek personTable
-    sqlStep query
-    person <- peeker query :: IO Person
-    print person
-    sqlFinalize query
-
-    sqlClose sql
+    -- This should be reasonably fast
+    return $ \x -> do
+        poker x
+        liftIO $ do
+            sqlStep_ stmt
+            sqlReset stmt
+            sqlLastInsertRowId sql
+  where
+    table' :: NamedTable HasTableM a
+    table' = table
