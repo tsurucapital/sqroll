@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
-module Database.Sqroll.Table.Sqlite3 where
+module Database.Sqroll.Sqlite3 where
 
 import Control.Exception (bracket)
 import Data.Bits ((.|.))
@@ -144,25 +144,3 @@ orDie :: String -> SqlStatus -> IO ()
 orDie _   0 = return ()
 orDie msg s = error $ msg ++ ": status " ++ show s
 {-# INLINE orDie #-}
-
-test :: IO ()
-test = do
-    sql <- sqlOpen "test.db"
-    sqlExecute sql "CREATE TABLE IF NOT EXISTS people (name STRING, age INTEGER)"
-
-    stmt <- sqlPrepare sql "INSERT INTO people (name, age) VALUES (?, ?)"
-    sqlBindString stmt 1 "jasper"
-    sqlBindInt64 stmt 2 23
-    sqlStep stmt
-    sqlFinalize stmt
-
-    print =<< sqlLastInsertRowId sql
-
-    query <- sqlPrepare sql "SELECT name, age FROM people"
-    sqlStep query
-    name <- sqlColumnString query 0
-    age  <- sqlColumnInt64  query 1
-    sqlFinalize query
-    print (name, age)
-
-    sqlClose sql

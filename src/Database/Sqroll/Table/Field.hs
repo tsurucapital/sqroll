@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Database.Sqroll.Table.Field where
 
-import Database.Sqroll.Table.Sqlite3
+import Database.Sqroll.Sqlite3
 
 class Field a where
     fieldType  :: a -> String  -- Should work with 'undefined'
