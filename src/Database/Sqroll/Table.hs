@@ -1,14 +1,16 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 module Database.Sqroll.Table where
 
 import Control.Applicative
+import Control.Arrow (first)
 import Control.Monad
 import Control.Monad.Trans (MonadIO, liftIO)
-import Control.Arrow (first)
 import Data.List (intercalate)
+import Data.Monoid (Monoid, mappend, mempty)
 
 import Database.Sqroll.Table.Field
 import Database.Sqroll.Table.Sqlite3
@@ -53,14 +55,23 @@ enumField name extract = toEnum <$> field name (fromEnum . extract)
 
 --------------------------------------------------------------------------------
 
-tableFields :: NamedTable m t -> [(String, String)]
-tableFields (NamedTable _ table) = go table
+tableFoldMap :: forall m t b. Monoid b
+              => (forall a. Field a => FieldInfo m t a -> b)
+              -> NamedTable m t
+              -> b
+tableFoldMap f (NamedTable _ table) = go table
   where
-    go :: forall m t a. Table m t a -> [(String, String)]
+    go :: forall a. Table m t a -> b
     go (Map _ t)      = go t
-    go (Pure _ )      = []
-    go (App t1 t2)    = go t1 ++ go t2
-    go (Primitive fi) = [(fieldName fi, fieldType (undefined :: a))]
+    go (Pure _)       = mempty
+    go (App t1 t2)    = go t1 `mappend` go t2
+    go (Primitive fi) = f fi
+
+tableFields :: forall m t. NamedTable m t -> [(String, String)]
+tableFields = tableFoldMap fieldName'
+  where
+    fieldName' :: forall a. Field a => FieldInfo m t a -> [(String, String)]
+    fieldName' fi = [(fieldName fi, fieldType (undefined :: a))]
 
 tableCreate :: NamedTable m t -> String
 tableCreate table =
@@ -84,16 +95,12 @@ tableSelect table =
     " FROM " ++ tableName table
 
 tablePoke :: forall m t. MonadIO m => NamedTable m t -> SqlStmt -> (t -> m ())
-tablePoke (NamedTable _ table) stmt =
-    let pokers = zipWith ($) (go table) [1 ..]
+tablePoke table stmt =
+    let pokers = zipWith ($) (tableFoldMap go table) [1 ..]
     in \x -> mapM_ ($ x) pokers
   where
-    go :: forall a. Table m t a -> [Int -> t -> m ()]
-    go (Map _ t)      = go t
-    go (Pure _)       = []
-    go (App t1 t2)    = go t1 ++ go t2
-    go (Primitive fi) =
-        [\n x -> fieldExtract fi x >>= liftIO . fieldPoke stmt n]
+    go :: forall a. Field a => FieldInfo m t a -> [Int -> t -> m ()]
+    go fi = [\n x -> fieldExtract fi x >>= liftIO . fieldPoke stmt n]
 
 tablePeek :: forall m t. MonadIO m => NamedTable m t -> SqlStmt -> m t
 tablePeek (NamedTable _ table) stmt = do
@@ -101,13 +108,13 @@ tablePeek (NamedTable _ table) stmt = do
     return x
   where
     go :: forall a. Table m t a -> Int -> m (a, Int)
-    go (Map f t)      !n = liftM (first f) (go t n)
-    go (Pure x)       !n = return (x, n)
-    go (App ft t)     !n = do
+    go (Map f t)     !n = liftM (first f) (go t n)
+    go (Pure x)      !n = return (x, n)
+    go (App ft t)    !n = do
         (f, n')  <- go ft n
         (x, n'') <- go t n'
         return (f x, n'')
-    go (Primitive fi) !n = do
+    go (Primitive _) !n = do
         x <- liftIO $ fieldPeek stmt n
         return (x, n + 1)
 

@@ -17,6 +17,8 @@ type SqlStatus = CInt
 newtype SqlRowId = SqlRowId Int64
     deriving (Show)
 
+type ForeignKey a = SqlRowId
+
 foreign import ccall "sqlite3.h sqlite3_open_v2" sqlite3_open_v2
     :: CString -> Ptr Sql -> CInt -> CString -> IO SqlStatus
 
