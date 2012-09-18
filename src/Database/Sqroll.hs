@@ -13,7 +13,7 @@ class HasTable t where
     table :: NamedTable HasTableM t
 
 makeSqroll :: forall a. (HasTable a, MonadIO HasTableM)
-           => Sql -> IO (a -> HasTableM (ForeignKey a))
+           => Sql -> IO (a -> HasTableM (ForeignKey a), IO ())
 makeSqroll sql = do
     -- Create tables and indexes (if not exist...)
     sqlExecute sql $ tableCreate table'
@@ -24,12 +24,14 @@ makeSqroll sql = do
     let poker = tablePoke table' stmt
 
     -- This should be reasonably fast
-    return $ \x -> do
-        poker x
-        liftIO $ do
-            sqlStep_ stmt
-            sqlReset stmt
-            sqlLastInsertRowId sql
+    let insert x = do
+            poker x
+            liftIO $ do
+                sqlStep_ stmt
+                sqlReset stmt
+                sqlLastInsertRowId sql
+
+    return (insert, sqlFinalize stmt)
   where
     table' :: NamedTable HasTableM a
     table' = table

@@ -20,11 +20,15 @@ instance HasTable Person where
 main :: IO ()
 main = do
     sql    <- sqlOpen "test.db"
-    sqroll <- makeSqroll sql
+    (sqroll, closeSqroll) <- makeSqroll sql
 
-    forM_ [1 .. 1000] $ \i -> do
+    sqlExecute sql "BEGIN"
+    forM_ [1 .. 1000000] $ \i -> do
         _ <- sqroll $ Person ("Dude " ++ show i) (i `mod` 60)
         return ()
+    sqlExecute sql "COMMIT"
+
+    closeSqroll
 
     {-
 
