@@ -7,15 +7,18 @@ import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
 
 class HasTable t where
-    type HasTableM m :: * -> *
-    table :: NamedTable (HasTableM m) t
+    type HasTableM :: * -> *
+    table :: NamedTable HasTableM t
 
 instance HasTable Person where
-    type HasTableM m = IO
+    type HasTableM = IO
     table = namedTable "people" $ Person
         <$> field "name"    personName
         <*> field "age"     personAge
         <*> field "company" personCompany
+
+fromForeignKey :: HasTable a => ForeignKey a -> HasTableM a
+fromForeignKey = undefined
 
 data Person = Person
     { personName    :: String
