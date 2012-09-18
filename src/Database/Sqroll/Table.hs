@@ -56,9 +56,9 @@ enumField name extract = toEnum <$> field name (fromEnum . extract)
 --------------------------------------------------------------------------------
 
 tableFoldMap :: forall m t b. Monoid b
-              => (forall a. Field a => FieldInfo m t a -> b)
-              -> NamedTable m t
-              -> b
+             => (forall a. Field a => FieldInfo m t a -> b)
+             -> NamedTable m t
+             -> b
 tableFoldMap f (NamedTable _ table) = go table
   where
     go :: forall a. Table m t a -> b
@@ -79,6 +79,17 @@ tableCreate table =
     intercalate ", " (map makeField $ tableFields table) ++ ")"
   where
     makeField (name, type') = name ++ " " ++ type'
+
+tableIndexes :: forall m t. NamedTable m t -> [String]
+tableIndexes table = tableFoldMap tableIndex table
+  where
+    tableIndex :: forall a. Field a => FieldInfo m t a -> [String]
+    tableIndex fi = do
+        guard $ fieldIndex (undefined :: a)
+        let idxName = "index_" ++ tableName table ++ "_" ++ fieldName fi
+        return $
+            "CREATE INDEX IF NOT EXISTS " ++ idxName ++ " ON " ++
+            tableName table ++ " (" ++ fieldName fi ++ ")"
 
 tableInsert :: NamedTable m t -> String
 tableInsert table =
@@ -154,20 +165,22 @@ data Hobby = Skate | Surf | Soccer
 -}
 
 data Person = Person
-    { personName  :: String
-    , personAge   :: Int
+    { personName    :: String
+    , personAge     :: Int
+    , personCompany :: ForeignKey Int
     } deriving (Show)
 
 personTable :: NamedTable IO Person
 personTable = namedTable "people" $ Person
-    <$> field     "name"  personName
-    <*> field     "age"   personAge
+    <$> field "name"    personName
+    <*> field "age"     personAge
+    <*> field "company" personCompany
 
 jasper :: Person
-jasper = Person "Jasper" 22
+jasper = Person "Jasper" 22 (SqlRowId 123)
 
 denis :: Person
-denis = Person "Denis" 24
+denis = Person "Denis" 24 (SqlRowId 1234)
 
 {-
 main :: IO ()
@@ -188,6 +201,7 @@ main :: IO ()
 main = do
     sql <- sqlOpen "test.db"
     sqlExecute sql $ tableCreate personTable
+    mapM_ (sqlExecute sql) $ tableIndexes personTable
 
     stmt <- sqlPrepare sql $ tableInsert personTable
     let binder = tablePoke personTable stmt
