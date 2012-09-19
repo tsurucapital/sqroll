@@ -1,4 +1,3 @@
-{-# LANGUAGE TypeFamilies #-}
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (forM_)
 
@@ -12,7 +11,6 @@ data Person = Person
     } deriving (Show)
 
 instance HasTable Person where
-    type HasTableM = IO
     table = namedTable "people" $ Person
         <$> field "name"    personName
         <*> field "age"     personAge

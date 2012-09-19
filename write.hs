@@ -1,4 +1,3 @@
-{-# LANGUAGE TypeFamilies #-}
 import Control.Applicative ((<$>), (<*>))
 
 import Database.Sqroll

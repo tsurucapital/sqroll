@@ -1,9 +1,5 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
 module Database.Sqroll where
-
-import Control.Monad.Trans (MonadIO, liftIO)
 
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
@@ -23,9 +19,7 @@ makeSqroll sql = do
     let poker = tablePoke table' stmt
 
     -- This should be reasonably fast
-    let insert x = do
-            poker x
-            sqlStep stmt >> sqlReset stmt
+    let insert x = poker x >> sqlStep stmt >> sqlReset stmt
 
     return (insert, sqlFinalize stmt)
   where
