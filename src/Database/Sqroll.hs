@@ -1,11 +1,19 @@
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.Sqroll where
 
+import GHC.Generics (Generic, Rep, from, to)
+
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
+import Database.Sqroll.Table.Generic
 
 class HasTable t where
     table :: NamedTable t
+
+    default table :: (Generic t, GNamedTable (Rep t)) => NamedTable t
+    table = gNamedTable to from
 
 makeSqroll :: forall a. (HasTable a)
            => Sql -> IO (a -> IO (), IO ())

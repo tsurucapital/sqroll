@@ -6,7 +6,7 @@
 module Database.Sqroll.Table
     ( -- * Types
       Table
-    , NamedTable
+    , NamedTable (..)
 
       -- * Creating tables
     , namedTable
@@ -24,7 +24,6 @@ module Database.Sqroll.Table
 import Control.Applicative
 import Control.Arrow (first)
 import Control.Monad
-import Control.Monad.Trans (MonadIO, liftIO)
 import Data.List (intercalate)
 import Data.Monoid (Monoid, mappend, mempty)
 
