@@ -29,7 +29,7 @@ insert10k db insert = do
 
 main :: IO ()
 main = do
-    db <- sqlOpen ":memory:"
+    db <- sqlOpen "live.db"
     (insert, finalize) <- makeSqroll db
     sequence_ . replicate 50 $ insert10k db insert
     finalize

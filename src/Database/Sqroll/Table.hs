@@ -11,7 +11,6 @@ module Database.Sqroll.Table
       -- * Creating tables
     , namedTable
     , field
-    , fieldM
 
       -- * Inspecting tables
     , tableCreate
@@ -32,70 +31,67 @@ import Data.Monoid (Monoid, mappend, mempty)
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table.Field
 
-data FieldInfo m t a = FieldInfo
+data FieldInfo t a = FieldInfo
     { fieldName    :: String
-    , fieldExtract :: t -> m a
+    , fieldExtract :: t -> a
     }
 
-data Table m t f where
+data Table t f where
     -- Applicative interface
-    Map  :: (a -> b) -> Table m t a -> Table m t b
-    Pure :: a -> Table m t a
-    App  :: Table m t (a -> b) -> Table m t a -> Table m t b
+    Map  :: (a -> b) -> Table t a -> Table t b
+    Pure :: a -> Table t a
+    App  :: Table t (a -> b) -> Table t a -> Table t b
 
     -- Primitives
-    Primitive :: (Field a, Monad m) => FieldInfo m t a -> Table m t a
+    Primitive :: (Field a) => FieldInfo t a -> Table t a
 
-instance Functor (Table m t) where
+instance Functor (Table t) where
     fmap = Map
 
-instance Applicative (Table m t) where
+instance Applicative (Table t) where
     pure  = Pure
     (<*>) = App
 
-data NamedTable m t = NamedTable
+data NamedTable t = NamedTable
     { tableName :: String
-    , tableTree :: Table m t t
+    , tableTree :: Table t t
     }
 
-namedTable :: String -> Table m t t -> NamedTable m t
+namedTable :: String -> Table t t -> NamedTable t
 namedTable = NamedTable
 
-field :: (Field a, Monad m) => String -> (t -> a) -> Table m t a
-field name extract = fieldM name $ return . extract
+field :: (Field a) => String -> (t -> a) -> Table t a
+field name extract = Primitive $ FieldInfo name extract
 
-fieldM :: (Field a, Monad m) => String -> (t -> m a) -> Table m t a
-fieldM name extract = Primitive $ FieldInfo name extract
-
-tableFoldMap :: forall m t b. Monoid b
-             => (forall a. Field a => FieldInfo m t a -> b)
-             -> NamedTable m t
+tableFoldMap :: forall t b. Monoid b
+             => (forall a. Field a => FieldInfo t a -> b)
+             -> NamedTable t
              -> b
 tableFoldMap f table = go (tableTree table)
   where
-    go :: forall a. Table m t a -> b
+    go :: forall a. Table t a -> b
     go (Map _ t)      = go t
     go (Pure _)       = mempty
     go (App t1 t2)    = go t1 `mappend` go t2
     go (Primitive fi) = f fi
 
-tableFields :: forall m t. NamedTable m t -> [(String, String)]
+tableFields :: forall t. NamedTable t -> [(String, String)]
 tableFields = tableFoldMap fieldName'
   where
-    fieldName' :: forall a. Field a => FieldInfo m t a -> [(String, String)]
+    fieldName' :: forall a. Field a => FieldInfo t a -> [(String, String)]
     fieldName' fi = [(fieldName fi, fieldType (undefined :: a))]
 
-tableCreate :: NamedTable m t -> String
+tableCreate :: NamedTable t -> String
 tableCreate table =
     "CREATE TABLE IF NOT EXISTS " ++ tableName table ++ " (" ++
     intercalate ", " (map makeField $ tableFields table) ++ ")"
   where
     makeField (name, type') = name ++ " " ++ type'
 
-tableIndexes :: forall m t. NamedTable m t -> [String]
+tableIndexes :: forall t. NamedTable t -> [String]
 tableIndexes table = tableFoldMap tableIndex table
   where
-    tableIndex :: forall a. Field a => FieldInfo m t a -> [String]
+    tableIndex :: forall a. Field a => FieldInfo t a -> [String]
     tableIndex fi = do
         guard $ fieldIndex (undefined :: a)
         let idxName = "index_" ++ tableName table ++ "_" ++ fieldName fi
@@ -103,7 +99,7 @@ tableIndexes table = tableFoldMap tableIndex table
             "CREATE INDEX IF NOT EXISTS " ++ idxName ++ " ON " ++
             tableName table ++ " (" ++ fieldName fi ++ ")"
 
-tableInsert :: NamedTable m t -> String
+tableInsert :: NamedTable t -> String
 tableInsert table =
     "INSERT INTO " ++ tableName table ++ " (" ++
     intercalate ", " (map fst $ tableFields table) ++
@@ -112,25 +108,25 @@ tableInsert table =
   where
     fields = tableFields table
 
-tableSelect :: NamedTable m t -> String
+tableSelect :: NamedTable t -> String
 tableSelect table =
     "SELECT rowid, " ++ intercalate ", " (map fst $ tableFields table) ++
     " FROM " ++ tableName table
 
-tablePoke :: forall m t. MonadIO m => NamedTable m t -> SqlStmt -> (t -> m ())
+tablePoke :: forall t. NamedTable t -> SqlStmt -> (t -> IO ())
 tablePoke table stmt =
     let pokers = zipWith ($) (tableFoldMap go table) [1 ..]
     in \x -> mapM_ ($ x) pokers
   where
-    go :: forall a. Field a => FieldInfo m t a -> [Int -> t -> m ()]
-    go fi = [\n x -> fieldExtract fi x >>= liftIO . fieldPoke stmt n]
+    go :: forall a. Field a => FieldInfo t a -> [Int -> t -> IO ()]
+    go fi = [\n x -> fieldPoke stmt n (fieldExtract fi x)]
 
-tablePeek :: forall m t. MonadIO m => NamedTable m t -> SqlStmt -> m t
+tablePeek :: forall t. NamedTable t -> SqlStmt -> IO t
 tablePeek (NamedTable _ table) stmt = do
     (x, _) <- go table 1
     return x
   where
-    go :: forall a. Table m t a -> Int -> m (a, Int)
+    go :: forall a. Table t a -> Int -> IO (a, Int)
     go (Map f t)     !n = liftM (first f) (go t n)
     go (Pure x)      !n = return (x, n)
     go (App ft t)    !n = do
@@ -138,5 +134,5 @@ tablePeek (NamedTable _ table) stmt = do
         (x, n'') <- go t n'
         return (f x, n'')
     go (Primitive _) !n = do
-        x <- liftIO $ fieldPeek stmt n
+        x <- fieldPeek stmt n
         return (x, n + 1)

@@ -9,11 +9,10 @@ import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
 
 class HasTable t where
-    type HasTableM :: * -> *
-    table :: NamedTable HasTableM t
+    table :: NamedTable t
 
-makeSqroll :: forall a. (HasTable a, MonadIO HasTableM)
-           => Sql -> IO (a -> HasTableM (ForeignKey a), IO ())
+makeSqroll :: forall a. (HasTable a)
+           => Sql -> IO (a -> IO (), IO ())
 makeSqroll sql = do
     -- Create tables and indexes (if not exist...)
     sqlExecute sql $ tableCreate table'
@@ -26,12 +25,9 @@ makeSqroll sql = do
     -- This should be reasonably fast
     let insert x = do
             poker x
-            liftIO $ do
-                sqlStep_ stmt
-                sqlReset stmt
-                sqlLastInsertRowId sql
+            sqlStep stmt >> sqlReset stmt
 
     return (insert, sqlFinalize stmt)
   where
-    table' :: NamedTable HasTableM a
+    table' :: NamedTable a
     table' = table
