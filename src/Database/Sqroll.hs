@@ -22,9 +22,12 @@ makeSqroll sql = do
     sqlExecute sql $ tableCreate table'
     mapM_ (sqlExecute sql) $ tableIndexes table'
 
+    -- Ensure we have the correct defaults
+    table'' <- tableMakeDefaults sql table'
+
     -- Prepare an insert statement and a function to bind args
-    stmt <- sqlPrepare sql $ tableInsert table'
-    let poker = tablePoke table' stmt
+    stmt <- sqlPrepare sql $ tableInsert table''
+    let poker = tablePoke table'' stmt
 
     -- This should be reasonably fast
     let insert x = poker x >> sqlStep stmt >> sqlReset stmt

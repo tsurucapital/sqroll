@@ -42,10 +42,12 @@ foreign import ccall "sqlite3.h sqlite3_prepare_v2" sqlite3_prepare_v2
     :: Sql -> CString -> CInt -> Ptr SqlStmt -> Ptr CString -> IO SqlStatus
 
 sqlPrepare :: Sql -> String -> IO SqlStmt
-sqlPrepare db str = alloca $ \stmtPtr -> withCString str $ \cstr -> do
-    sqlite3_prepare_v2 db cstr (-1) stmtPtr nullPtr >>=
-        orDie "sqlite3_prepare_v2"
-    peek stmtPtr
+sqlPrepare db str = do
+    putStrLn str
+    alloca $ \stmtPtr -> withCString str $ \cstr -> do
+        sqlite3_prepare_v2 db cstr (-1) stmtPtr nullPtr >>=
+            orDie "sqlite3_prepare_v2"
+        peek stmtPtr
 {-# INLINE sqlPrepare #-}
 
 foreign import ccall "sqlite3.h sqlite3_bind_int64" sqlite3_bind_int64
@@ -54,7 +56,7 @@ foreign import ccall "sqlite3.h sqlite3_bind_int64" sqlite3_bind_int64
 sqlBindInt64 :: SqlStmt -> Int -> Int64 -> IO ()
 sqlBindInt64 stmt n x =
     sqlite3_bind_int64 stmt (fromIntegral n) (fromIntegral x) >>=
-        orDie "sqlite3_column_int64"
+        orDie "sqlite3_bind_int64"
 {-# INLINE sqlBindInt64 #-}
 
 foreign import ccall "sqlite3.h sqlite3_bind_double" sqlite3_bind_double
@@ -121,6 +123,16 @@ sqlStep stmt = sqlite3_step stmt >>= checkStatus
     {-# INLINE checkStatus #-}
 {-# INLINE sqlStep #-}
 
+sqlStepAll :: SqlStmt -> IO a -> IO [a]
+sqlStepAll stmt f = sqlStep stmt >>= go
+  where
+    go False = return []
+    go True  = do
+        x <- f
+        n <- sqlStep stmt
+        fmap (x :) (go n)
+{-# INLINE sqlStepAll #-}
+
 sqlStep_ :: SqlStmt -> IO ()
 sqlStep_ stmt = sqlStep stmt >> return ()
 {-# INLINE sqlStep_ #-}
@@ -143,6 +155,14 @@ sqlLastInsertRowId = fmap (SqlRowId . fromIntegral) . sqlite3_last_insert_rowid
 sqlExecute :: Sql -> String -> IO ()
 sqlExecute db str = bracket (sqlPrepare db str) sqlFinalize sqlStep >> return ()
 {-# INLINE sqlExecute #-}
+
+-- | Get all the column names for a given table
+sqlTableColumns :: Sql -> String -> IO [String]
+sqlTableColumns sql tableName = do
+    stmt <- sqlPrepare sql $ "PRAGMA table_info(" ++ tableName ++ ")"
+    cols <- sqlStepAll stmt $ sqlColumnString stmt 1
+    sqlFinalize stmt
+    return cols
 
 orDie :: String -> SqlStatus -> IO ()
 orDie _   0 = return ()

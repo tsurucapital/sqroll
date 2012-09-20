@@ -11,6 +11,7 @@ module Database.Sqroll.Table
       -- * Creating tables
     , namedTable
     , field
+    , (<?)
 
       -- * Inspecting tables
     , tableCreate
@@ -19,6 +20,7 @@ module Database.Sqroll.Table
     , tableSelect
     , tablePoke
     , tablePeek
+    , tableMakeDefaults
     ) where
 
 import Control.Applicative
@@ -33,6 +35,7 @@ import Database.Sqroll.Table.Field
 data FieldInfo t a = FieldInfo
     { fieldName    :: String
     , fieldExtract :: t -> a
+    , fieldDefault :: a
     }
 
 data Table t f where
@@ -60,7 +63,12 @@ namedTable :: String -> Table t t -> NamedTable t
 namedTable = NamedTable
 
 field :: (Field a) => String -> (t -> a) -> Table t a
-field name extract = Primitive $ FieldInfo name extract
+field name extract = Primitive $ FieldInfo name extract $ error $
+    "Field " ++ name ++ " has no value nor default"
+
+(<?) :: Table t a -> a -> Table t a
+(<?) (Primitive (FieldInfo n e _)) def = Primitive (FieldInfo n e def)
+(<?) x                             _   = x
 
 tableFoldMap :: forall t b. Monoid b
              => (forall a. Field a => FieldInfo t a -> b)
@@ -135,3 +143,19 @@ tablePeek (NamedTable _ table) stmt = do
     go (Primitive _) !n = do
         x <- fieldPeek stmt n
         return (x, n + 1)
+
+-- | Check if columns are missing in the database and ensure the defaults are
+-- used in those cases
+tableMakeDefaults :: forall t. Sql -> NamedTable t -> IO (NamedTable t)
+tableMakeDefaults sql (NamedTable name table) = do
+    present <- sqlTableColumns sql name
+    print present
+    return $ NamedTable name $ go present table
+  where
+    go :: forall a. [String] -> Table t a -> Table t a
+    go p (Map f t)              = Map f (go p t)
+    go p (Pure x)               = Pure x
+    go p (App ft t)             = App (go p ft) (go p t)
+    go p (Primitive fi)
+        | fieldName fi `elem` p = Primitive fi
+        | otherwise             = Pure (fieldDefault fi)  -- TODO default
