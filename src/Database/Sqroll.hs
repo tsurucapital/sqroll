@@ -16,14 +16,14 @@ class HasTable t where
     table = gNamedTable to from
 
 makeSqroll :: forall a. (HasTable a)
-           => Sql -> IO (a -> IO (), IO ())
-makeSqroll sql = do
+           => Sql -> Maybe a -> IO (a -> IO (), IO ())
+makeSqroll sql defaultRecord = do
     -- Create tables and indexes (if not exist...)
     sqlExecute sql $ tableCreate table'
     mapM_ (sqlExecute sql) $ tableIndexes table'
 
     -- Ensure we have the correct defaults
-    table'' <- tableMakeDefaults sql table'
+    table'' <- tableMakeDefaults sql defaultRecord table'
 
     -- Prepare an insert statement and a function to bind args
     stmt <- sqlPrepare sql $ tableInsert table''

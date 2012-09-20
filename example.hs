@@ -21,16 +21,19 @@ instance HasTable Person where
         <*> field "personAge"  personAge
         <*> field "personWeight"  personAge
 
+tom :: Person
+tom = Person "Tom" 40 80
+
 main :: IO ()
 main = do
     sql    <- sqlOpen "test.db"
-    (sqroll, closeSqroll) <- makeSqroll sql
+    (sqroll, closeSqroll) <- makeSqroll sql Nothing
 
     sqroll $ Person "Jasper" 23 67
 
     closeSqroll
 
-    withDefaults <- tableMakeDefaults sql table
+    withDefaults <- tableMakeDefaults sql (Just tom) table
     query <- sqlPrepare sql $ tableSelect withDefaults
     let peeker = tablePeek withDefaults
     sqlStep query

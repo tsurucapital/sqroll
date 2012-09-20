@@ -139,8 +139,9 @@ tablePeek (NamedTable _ table) stmt = do
 
 -- | Check if columns are missing in the database and ensure the defaults are
 -- used in those cases
-tableMakeDefaults :: forall t. Sql -> NamedTable t -> IO (NamedTable t)
-tableMakeDefaults sql (NamedTable name table) = do
+tableMakeDefaults :: forall t. Sql -> Maybe t -> NamedTable t
+                  -> IO (NamedTable t)
+tableMakeDefaults sql defaultRecord (NamedTable name table) = do
     present <- sqlTableColumns sql name
     return $ NamedTable name $ go present table
   where
@@ -150,5 +151,5 @@ tableMakeDefaults sql (NamedTable name table) = do
     go p (App ft t)             = App (go p ft) (go p t)
     go p (Primitive fi)
         | fieldName fi `elem` p = Primitive fi
-        -- TODO get from default record
-        | otherwise             = Pure fieldDefault
+        | otherwise             = Pure $
+            maybe fieldDefault (fieldExtract fi) defaultRecord

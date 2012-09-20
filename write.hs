@@ -35,7 +35,7 @@ insert10k db insert = do
 main :: IO ()
 main = do
     db <- sqlOpen "live.db"
-    (insert, finalize) <- makeSqroll db
+    (insert, finalize) <- makeSqroll db Nothing
     sequence_ . replicate 50 $ insert10k db insert
     finalize
     sqlClose db
