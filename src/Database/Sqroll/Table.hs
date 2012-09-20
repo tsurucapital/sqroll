@@ -149,7 +149,6 @@ tablePeek (NamedTable _ table) stmt = do
 tableMakeDefaults :: forall t. Sql -> NamedTable t -> IO (NamedTable t)
 tableMakeDefaults sql (NamedTable name table) = do
     present <- sqlTableColumns sql name
-    print present
     return $ NamedTable name $ go present table
   where
     go :: forall a. [String] -> Table t a -> Table t a
