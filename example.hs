@@ -19,7 +19,7 @@ instance HasTable Person where
     table = namedTable "People" $ Person
         <$> field "personName" personName
         <*> field "personAge"  personAge
-        <*> field "personWeight"  personAge <? 100
+        <*> field "personWeight"  personAge
 
 main :: IO ()
 main = do

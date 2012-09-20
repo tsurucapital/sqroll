@@ -4,14 +4,16 @@ module Database.Sqroll.Table.Field where
 import Database.Sqroll.Sqlite3
 
 class Field a where
-    fieldType  :: a -> String  -- Should work with 'undefined'
-    fieldIndex :: a -> Bool    -- Should work with 'undefined'
-    fieldPoke  :: SqlStmt -> Int -> a -> IO ()
-    fieldPeek  :: SqlStmt -> Int -> IO a
+    fieldType    :: a -> String  -- Should work with 'undefined'
+    fieldIndex   :: a -> Bool    -- Should work with 'undefined'
+    fieldDefault :: a
+    fieldPoke    :: SqlStmt -> Int -> a -> IO ()
+    fieldPeek    :: SqlStmt -> Int -> IO a
 
 instance Field Int where
-    fieldType  = const "INTEGER"
-    fieldIndex = const False
+    fieldType    = const "INTEGER"
+    fieldIndex   = const False
+    fieldDefault = 0
 
     fieldPoke stmt n = sqlBindInt64 stmt n . fromIntegral
     {-# INLINE fieldPoke #-}
@@ -20,8 +22,9 @@ instance Field Int where
     {-# INLINE fieldPeek #-}
 
 instance Field String where
-    fieldType  = const "TEXT"
-    fieldIndex = const False
+    fieldType    = const "TEXT"
+    fieldIndex   = const False
+    fieldDefault = ""
 
     fieldPoke = sqlBindString
     {-# INLINE fieldPoke #-}
@@ -30,8 +33,9 @@ instance Field String where
     {-# INLINE fieldPeek #-}
 
 instance Field Double where
-    fieldType  = const "DOUBLE"
-    fieldIndex = const False
+    fieldType    = const "DOUBLE"
+    fieldIndex   = const False
+    fieldDefault = 0
 
     fieldPoke = sqlBindDouble
     {-# INLINE fieldPoke #-}
@@ -40,8 +44,9 @@ instance Field Double where
     {-# INLINE fieldPeek #-}
 
 instance Field SqlRowId where
-    fieldType  = const "INTEGER"
-    fieldIndex = const True
+    fieldType    = const "INTEGER"
+    fieldIndex   = const True
+    fieldDefault = SqlRowId 0
 
     fieldPoke stmt n (SqlRowId x) = sqlBindInt64 stmt n x
     {-# INLINE fieldPoke #-}
