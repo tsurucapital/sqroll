@@ -39,6 +39,16 @@ makeAppend sql defaultRecord = do
 
     return (insert, sqlFinalize stmt)
 
+makeMassAppend :: HasTable a => Sql -> Maybe a -> IO ([a] -> IO (), IO ())
+makeMassAppend sql defaultRecord = do
+    (insert, finalize) <- makeAppend sql defaultRecord
+    let massAppend xs = do
+            sqlExecute sql "BEGIN"
+            mapM_ insert xs
+            sqlExecute sql "COMMIT"
+
+    return (massAppend, finalize)
+
 makeTail :: HasTable a => Sql -> Maybe a -> (a -> IO ()) -> IO (IO (), IO ())
 makeTail sql defaultRecord f = do
     ref    <- newIORef (SqlRowId (-1))
