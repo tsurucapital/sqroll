@@ -21,7 +21,8 @@ trades = [TradeLog i (fromIntegral i * 1000) (i + 1000) | i <- [1..]]
 main :: IO ()
 main = do
     db <- sqlOpen "live.db"
-    (massAppend, finalize) <- makeMassAppend db Nothing
-    sequence_ . replicate 50 $ massAppend $ take 10000 trades
+    (insert, finalize) <- makeAppend db Nothing
+    sequence_ . replicate 50 $ transaction db $
+        mapM_ insert $ take 10000 trades
     finalize
     sqlClose db
