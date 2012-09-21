@@ -14,7 +14,7 @@ type Sql = Ptr ()
 type SqlStmt = Ptr ()
 type SqlStatus = CInt
 
-newtype SqlRowId = SqlRowId Int64
+newtype SqlRowId = SqlRowId {unSqlRowId :: Int64}
     deriving (Show)
 
 type ForeignKey a = SqlRowId
@@ -149,6 +149,10 @@ foreign import ccall "sqlite3.h sqlite3_last_insert_rowid"
 sqlLastInsertRowId :: Sql -> IO SqlRowId
 sqlLastInsertRowId = fmap (SqlRowId . fromIntegral) . sqlite3_last_insert_rowid
 {-# INLINE sqlLastInsertRowId #-}
+
+sqlLastSelectRowid :: SqlStmt -> IO SqlRowId
+sqlLastSelectRowid stmt = fmap SqlRowId $ sqlColumnInt64 stmt 0
+{-# INLINE sqlLastSelectRowid #-}
 
 sqlExecute :: Sql -> String -> IO ()
 sqlExecute db str = bracket (sqlPrepare db str) sqlFinalize sqlStep >> return ()

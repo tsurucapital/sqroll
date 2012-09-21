@@ -147,7 +147,7 @@ tableMakeDefaults sql defaultRecord (NamedTable name table) = do
   where
     go :: forall a. [String] -> Table t a -> Table t a
     go p (Map f t)              = Map f (go p t)
-    go p (Pure x)               = Pure x
+    go _ (Pure x)               = Pure x
     go p (App ft t)             = App (go p ft) (go p t)
     go p (Primitive fi)
         | fieldName fi `elem` p = Primitive fi
