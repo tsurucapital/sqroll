@@ -1,9 +1,20 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Database.Sqroll where
+module Database.Sqroll
+    ( HasTable
 
-import Data.IORef (newIORef, readIORef, writeIORef)
+    , Sqroll (sqrollSql)
+
+    , sqrollOpen
+    , sqrollClose
+    , sqrollTransaction
+    , sqrollAppend
+    , sqrollTail
+    ) where
+
+import Control.Applicative ((<$>), (<*>))
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import GHC.Generics (Generic, Rep, from, to)
 
 import Database.Sqroll.Sqlite3
@@ -15,6 +26,38 @@ class HasTable t where
 
     default table :: (Generic t, GNamedTable (Rep t)) => NamedTable t
     table = gNamedTable to from
+
+data Sqroll = Sqroll
+    { sqrollSql        :: Sql
+    , sqrollFinalizers :: IORef [IO ()]
+    }
+
+sqrollOpen :: FilePath -> IO Sqroll
+sqrollOpen filePath = Sqroll <$> sqlOpen filePath <*> newIORef []
+
+sqrollClose :: Sqroll -> IO ()
+sqrollClose sqroll = do
+    sequence_ =<< readIORef (sqrollFinalizers sqroll)
+    sqlClose $ sqrollSql sqroll
+
+sqrollTransaction :: Sqroll -> IO a -> IO a
+sqrollTransaction sqroll f = do
+    sqlExecute (sqrollSql sqroll) "BEGIN"
+    x <- f
+    sqlExecute (sqrollSql sqroll) "COMMIT"
+    return x
+
+sqrollAppend :: HasTable a => Sqroll -> Maybe a -> IO (a -> IO ())
+sqrollAppend sqroll defaultRecord = do
+    (append, finalizer) <- makeAppend (sqrollSql sqroll) defaultRecord
+    modifyIORef (sqrollFinalizers sqroll) (finalizer :)
+    return append
+
+sqrollTail :: HasTable a => Sqroll -> Maybe a -> (a -> IO ()) -> IO (IO ())
+sqrollTail sqroll defaultRecord f = do
+    (tail', finalizer) <- makeTail (sqrollSql sqroll) defaultRecord f
+    modifyIORef (sqrollFinalizers sqroll) (finalizer :)
+    return tail'
 
 -- | Create tables and indexes (if not exist...), ensure we have the correct
 -- defaults
@@ -38,13 +81,6 @@ makeAppend sql defaultRecord = do
     let insert x = poker x >> sqlStep stmt >> sqlReset stmt
 
     return (insert, sqlFinalize stmt)
-
-transaction :: Sql -> IO a -> IO a
-transaction sql f = do
-    sqlExecute sql "BEGIN"
-    x <- f
-    sqlExecute sql "COMMIT"
-    return x
 
 makeTail :: HasTable a => Sql -> Maybe a -> (a -> IO ()) -> IO (IO (), IO ())
 makeTail sql defaultRecord f = do

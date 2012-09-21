@@ -1,10 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
-import Control.Applicative ((<$>), (<*>))
 import GHC.Generics (Generic)
 
 import Database.Sqroll
-import Database.Sqroll.Table
-import Database.Sqroll.Sqlite3
 
 data TradeLog
     = TradeLog
@@ -20,9 +17,8 @@ trades = [TradeLog i (fromIntegral i * 1000) (i + 1000) | i <- [1..]]
 
 main :: IO ()
 main = do
-    db <- sqlOpen "live.db"
-    (insert, finalize) <- makeAppend db Nothing
-    sequence_ . replicate 50 $ transaction db $
+    sqroll <- sqrollOpen "live.db"
+    insert <- sqrollAppend sqroll Nothing
+    sequence_ . replicate 50 $ sqrollTransaction sqroll $
         mapM_ insert $ take 10000 trades
-    finalize
-    sqlClose db
+    sqrollClose sqroll
