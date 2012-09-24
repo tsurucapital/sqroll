@@ -2,6 +2,8 @@
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (forM_)
 import GHC.Generics (Generic)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 
 import Database.Sqroll
 import Database.Sqroll.Table
@@ -10,35 +12,31 @@ import Database.Sqroll.Sqlite3
 data Person = Person
     { personName :: String
     , personAge  :: Int
-    , personWeight :: Int
+    , personHash :: ByteString
     } deriving (Generic, Show)
 
--- instance HasTable Person
-
-instance HasTable Person where
-    table = namedTable "People" $ Person
-        <$> field "personName" personName
-        <*> field "personAge"  personAge
-        <*> field "personWeight"  personAge
-
-tom :: Person
-tom = Person "Tom" 40 80
+instance HasTable Person
 
 main :: IO ()
 main = do
-    sql    <- sqlOpen "test.db"
-    (sqroll, closeSqroll) <- makeSqroll sql Nothing
+    sqroll <- sqrollOpen "test.db"
+    append <- sqrollAppend sqroll Nothing
 
-    sqroll $ Person "Jasper" 23 67
+    append $ Person "Jasper" 23 $ B.pack [0, 1, 2, 3]
 
-    closeSqroll
+    tail' <- sqrollTail sqroll Nothing (print :: Person -> IO ())
+    tail'
 
-    withDefaults <- tableMakeDefaults sql (Just tom) table
-    query <- sqlPrepare sql $ tableSelect withDefaults
+    sqrollClose sqroll
+
+    {-
+    withDefaults <- tableMakeDefaults sqroll (Just tom) table
+    query <- sqlPrepare sqroll $ tableSelect withDefaults
     let peeker = tablePeek withDefaults
     sqlStep query
     person <- peeker query :: IO Person
     print person
     sqlFinalize query
 
-    sqlClose sql
+    sqlClose sqroll
+    -}

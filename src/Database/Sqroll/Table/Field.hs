@@ -1,5 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
-module Database.Sqroll.Table.Field where
+module Database.Sqroll.Table.Field
+    ( Field (..)
+    ) where
+
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 
 import Database.Sqroll.Sqlite3
 
@@ -52,4 +57,15 @@ instance Field SqlRowId where
     {-# INLINE fieldPoke #-}
 
     fieldPeek stmt = fmap SqlRowId . sqlColumnInt64 stmt
+    {-# INLINE fieldPeek #-}
+
+instance Field ByteString where
+    fieldType    = const "BLOB"
+    fieldIndex   = const False
+    fieldDefault = B.empty
+
+    fieldPoke = sqlBindByteString
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek = sqlColumnByteString
     {-# INLINE fieldPeek #-}

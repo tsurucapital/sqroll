@@ -1,14 +1,18 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
 module Database.Sqroll.Sqlite3 where
 
+import Control.Applicative ((<$>))
 import Control.Exception (bracket)
 import Data.Bits ((.|.))
+import Data.ByteString (ByteString)
 import Data.Int (Int64)
 import Foreign.C.String
 import Foreign.C.Types
+import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
+import qualified Data.ByteString.Internal as BI
 
 type Sql = Ptr ()
 type SqlStmt = Ptr ()
@@ -78,6 +82,18 @@ sqlBindString stmt n string = withCStringLen string $ \(cstr, len) ->
         orDie "sqlite3_bind_text"
 {-# INLINE sqlBindString #-}
 
+foreign import ccall "sqlite3.h sqlite3_bind_blob" sqlite3_bind_blob
+    :: SqlStmt -> CInt -> Ptr () -> CInt -> Ptr () -> IO SqlStatus
+
+sqlBindByteString :: SqlStmt -> Int -> ByteString -> IO ()
+sqlBindByteString stmt n bs = withForeignPtr fptr $ \ptr ->
+    sqlite3_bind_blob
+        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) nullPtr >>=
+            orDie "sqlite3_bind_blob"
+  where
+    (fptr, o, l) = BI.toForeignPtr bs
+{-# INLINE sqlBindByteString #-}
+
 foreign import ccall "sqlite3.h sqlite3_column_int64" sqlite3_column_int64
     :: SqlStmt -> CInt -> IO CLLong
 
@@ -101,6 +117,26 @@ sqlColumnString :: SqlStmt -> Int -> IO String
 sqlColumnString stmt n =
     sqlite3_column_text stmt (fromIntegral n) >>= peekCString
 {-# INLINE sqlColumnString #-}
+
+foreign import ccall "sqlite3.h sqlite3_column_blob" sqlite3_column_blob
+    :: SqlStmt -> CInt -> IO (Ptr ())
+
+foreign import ccall "sqlite3.h sqlite3_column_bytes" sqlite3_column_bytes
+    :: SqlStmt -> CInt -> IO CInt
+
+sqlColumnByteString :: SqlStmt -> Int -> IO ByteString
+sqlColumnByteString stmt n = do
+    bytes <- fromIntegral <$> sqlite3_column_bytes stmt n'
+    fptr  <- mallocForeignPtrBytes bytes
+    sqlp  <- sqlite3_column_blob stmt n'
+
+    withForeignPtr fptr $ \ptr ->
+        BI.memcpy ptr (castPtr sqlp) (fromIntegral bytes)
+
+    return $ BI.fromForeignPtr fptr 0 bytes
+  where
+    n' = fromIntegral n
+{-# INLINE sqlColumnByteString #-}
 
 foreign import ccall "sqlite3.h sqlite3_finalize" sqlite3_finalize
     :: SqlStmt -> IO SqlStatus
