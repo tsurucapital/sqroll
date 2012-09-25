@@ -1,5 +1,40 @@
 {-# LANGUAGE CPP, ForeignFunctionInterface #-}
-module Database.Sqroll.Sqlite3 where
+module Database.Sqroll.Sqlite3
+    ( Sql
+    , SqlStmt
+    , SqlStatus
+    , SqlRowId (..)
+    , SqlKey
+    , SqlType (..)
+
+    , sqlTypeToString
+    
+    , sqlOpen
+    , sqlClose
+
+    , sqlPrepare
+    , sqlFinalize
+    , sqlStep
+    , sqlStepAll
+    , sqlStep_
+    , sqlReset
+    , sqlExecute
+
+    , sqlBindInt64
+    , sqlBindDouble
+    , sqlBindString
+    , sqlBindByteString
+    
+    , sqlColumnInt64
+    , sqlColumnDouble
+    , sqlColumnString
+    , sqlColumnByteString
+
+    , sqlLastInsertRowId
+    , sqlLastSelectRowid
+
+    , sqlTableColumns
+    ) where
 
 import Control.Applicative ((<$>))
 import Control.Exception (bracket)
@@ -21,7 +56,20 @@ type SqlStatus = CInt
 newtype SqlRowId = SqlRowId {unSqlRowId :: Int64}
     deriving (Show)
 
-type ForeignKey a = SqlRowId
+type SqlKey a = SqlRowId
+
+data SqlType
+    = SqlInteger
+    | SqlText
+    | SqlDouble
+    | SqlBlob
+    deriving (Show, Eq)
+
+sqlTypeToString :: SqlType -> String
+sqlTypeToString SqlInteger = "INTEGER"
+sqlTypeToString SqlText    = "TEXT"
+sqlTypeToString SqlDouble  = "DOUBLE"
+sqlTypeToString SqlBlob    = "BLOB"
 
 foreign import ccall "sqlite3.h sqlite3_open_v2" sqlite3_open_v2
     :: CString -> Ptr Sql -> CInt -> CString -> IO SqlStatus
@@ -51,6 +99,51 @@ sqlPrepare db str = alloca $ \stmtPtr -> withCString str $ \cstr -> do
         orDie "sqlite3_prepare_v2"
     peek stmtPtr
 {-# INLINE sqlPrepare #-}
+
+sqlFinalize :: SqlStmt -> IO ()
+sqlFinalize stmt = sqlite3_finalize stmt >>= orDie "sqlite3_finalize"
+{-# INLINE sqlFinalize #-}
+
+foreign import ccall "sqlite3.h sqlite3_step" sqlite3_step
+    :: SqlStmt -> IO SqlStatus
+
+sqlStep :: SqlStmt -> IO Bool
+sqlStep stmt = sqlite3_step stmt >>= checkStatus
+  where
+    checkStatus 100 = return True
+    checkStatus 101 = return False
+    checkStatus s   = error $ "sqlite3_step: status " ++ show s
+    {-# INLINE checkStatus #-}
+{-# INLINE sqlStep #-}
+
+sqlStepAll :: SqlStmt -> IO a -> IO [a]
+sqlStepAll stmt f = sqlStep stmt >>= go
+  where
+    go False = return []
+    go True  = do
+        x <- f
+        n <- sqlStep stmt
+        fmap (x :) (go n)
+{-# INLINE sqlStepAll #-}
+
+sqlStep_ :: SqlStmt -> IO ()
+sqlStep_ stmt = sqlStep stmt >> return ()
+{-# INLINE sqlStep_ #-}
+
+foreign import ccall "sqlite3.h sqlite3_reset" sqlite3_reset
+    :: SqlStmt -> IO SqlStatus
+
+sqlReset :: SqlStmt -> IO ()
+sqlReset stmt = sqlite3_reset stmt >>= orDie "sqlite3_reset"
+{-# INLINE sqlReset #-}
+
+sqlExecute :: Sql -> String -> IO ()
+sqlExecute db str = bracket (sqlPrepare db str) sqlFinalize sqlStep >> return ()
+{-# INLINE sqlExecute #-}
+
+foreign import ccall "sqlite3.h sqlite3_last_insert_rowid"
+    sqlite3_last_insert_rowid
+    :: Sql -> IO CLLong
 
 foreign import ccall "sqlite3.h sqlite3_bind_int64" sqlite3_bind_int64
     :: SqlStmt -> CInt -> CLLong -> IO SqlStatus
@@ -141,47 +234,6 @@ sqlColumnByteString stmt n = do
 foreign import ccall "sqlite3.h sqlite3_finalize" sqlite3_finalize
     :: SqlStmt -> IO SqlStatus
 
-sqlFinalize :: SqlStmt -> IO ()
-sqlFinalize stmt = sqlite3_finalize stmt >>= orDie "sqlite3_finalize"
-{-# INLINE sqlFinalize #-}
-
-foreign import ccall "sqlite3.h sqlite3_step" sqlite3_step
-    :: SqlStmt -> IO SqlStatus
-
-sqlStep :: SqlStmt -> IO Bool
-sqlStep stmt = sqlite3_step stmt >>= checkStatus
-  where
-    checkStatus 100 = return True
-    checkStatus 101 = return False
-    checkStatus s   = error $ "sqlite3_step: status " ++ show s
-    {-# INLINE checkStatus #-}
-{-# INLINE sqlStep #-}
-
-sqlStepAll :: SqlStmt -> IO a -> IO [a]
-sqlStepAll stmt f = sqlStep stmt >>= go
-  where
-    go False = return []
-    go True  = do
-        x <- f
-        n <- sqlStep stmt
-        fmap (x :) (go n)
-{-# INLINE sqlStepAll #-}
-
-sqlStep_ :: SqlStmt -> IO ()
-sqlStep_ stmt = sqlStep stmt >> return ()
-{-# INLINE sqlStep_ #-}
-
-foreign import ccall "sqlite3.h sqlite3_reset" sqlite3_reset
-    :: SqlStmt -> IO SqlStatus
-
-sqlReset :: SqlStmt -> IO ()
-sqlReset stmt = sqlite3_reset stmt >>= orDie "sqlite3_reset"
-{-# INLINE sqlReset #-}
-
-foreign import ccall "sqlite3.h sqlite3_last_insert_rowid"
-    sqlite3_last_insert_rowid
-    :: Sql -> IO CLLong
-
 sqlLastInsertRowId :: Sql -> IO SqlRowId
 sqlLastInsertRowId = fmap (SqlRowId . fromIntegral) . sqlite3_last_insert_rowid
 {-# INLINE sqlLastInsertRowId #-}
@@ -189,10 +241,6 @@ sqlLastInsertRowId = fmap (SqlRowId . fromIntegral) . sqlite3_last_insert_rowid
 sqlLastSelectRowid :: SqlStmt -> IO SqlRowId
 sqlLastSelectRowid stmt = fmap SqlRowId $ sqlColumnInt64 stmt 0
 {-# INLINE sqlLastSelectRowid #-}
-
-sqlExecute :: Sql -> String -> IO ()
-sqlExecute db str = bracket (sqlPrepare db str) sqlFinalize sqlStep >> return ()
-{-# INLINE sqlExecute #-}
 
 -- | Get all the column names for a given table
 sqlTableColumns :: Sql -> String -> IO [String]

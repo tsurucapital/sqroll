@@ -68,5 +68,5 @@ unCamelCase str
   where
     (x, xs) = break isUpper str
 
-    downCase (x : xs) = toLower x : xs
+    downCase (y : ys) = toLower y : ys
     downCase []       = []

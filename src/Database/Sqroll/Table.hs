@@ -75,10 +75,10 @@ tableFoldMap f table = go (tableTree table)
     go (App t1 t2)    = go t1 `mappend` go t2
     go (Primitive fi) = f fi
 
-tableFields :: forall t. NamedTable t -> [(String, String)]
+tableFields :: forall t. NamedTable t -> [(String, SqlType)]
 tableFields = tableFoldMap fieldName'
   where
-    fieldName' :: forall a. Field a => FieldInfo t a -> [(String, String)]
+    fieldName' :: forall a. Field a => FieldInfo t a -> [(String, SqlType)]
     fieldName' fi = [(fieldName fi, fieldType (undefined :: a))]
 
 tableCreate :: NamedTable t -> String
@@ -86,7 +86,7 @@ tableCreate table =
     "CREATE TABLE IF NOT EXISTS " ++ tableName table ++ " (" ++
     intercalate ", " (map makeField $ tableFields table) ++ ")"
   where
-    makeField (name, type') = name ++ " " ++ type'
+    makeField (name, type') = name ++ " " ++ sqlTypeToString type'
 
 tableIndexes :: forall t. NamedTable t -> [String]
 tableIndexes table = tableFoldMap tableIndex table

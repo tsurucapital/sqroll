@@ -11,14 +11,14 @@ import qualified Data.ByteString as B
 import Database.Sqroll.Sqlite3
 
 class Field a where
-    fieldType    :: a -> String  -- Should work with 'undefined'
-    fieldIndex   :: a -> Bool    -- Should work with 'undefined'
+    fieldType    :: a -> SqlType  -- Should work with 'undefined'
+    fieldIndex   :: a -> Bool     -- Should work with 'undefined'
     fieldDefault :: a
     fieldPoke    :: SqlStmt -> Int -> a -> IO ()
     fieldPeek    :: SqlStmt -> Int -> IO a
 
 instance Field Int where
-    fieldType    = const "INTEGER"
+    fieldType    = const SqlInteger
     fieldIndex   = const False
     fieldDefault = 0
 
@@ -29,7 +29,7 @@ instance Field Int where
     {-# INLINE fieldPeek #-}
 
 instance Field String where
-    fieldType    = const "TEXT"
+    fieldType    = const SqlText
     fieldIndex   = const False
     fieldDefault = ""
 
@@ -40,7 +40,7 @@ instance Field String where
     {-# INLINE fieldPeek #-}
 
 instance Field Double where
-    fieldType    = const "DOUBLE"
+    fieldType    = const SqlDouble
     fieldIndex   = const False
     fieldDefault = 0
 
@@ -51,7 +51,7 @@ instance Field Double where
     {-# INLINE fieldPeek #-}
 
 instance Field SqlRowId where
-    fieldType    = const "INTEGER"
+    fieldType    = const SqlInteger
     fieldIndex   = const True
     fieldDefault = SqlRowId 0
 
@@ -62,7 +62,7 @@ instance Field SqlRowId where
     {-# INLINE fieldPeek #-}
 
 instance Field ByteString where
-    fieldType    = const "BLOB"
+    fieldType    = const SqlBlob
     fieldIndex   = const False
     fieldDefault = B.empty
 
@@ -73,7 +73,7 @@ instance Field ByteString where
     {-# INLINE fieldPeek #-}
 
 instance Field UTCTime where
-    fieldType    = const "TEXT"
+    fieldType    = const SqlText
     fieldIndex   = const False
     fieldDefault = UTCTime (ModifiedJulianDay 0) 0
 
