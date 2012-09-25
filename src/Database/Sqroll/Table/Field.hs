@@ -5,6 +5,7 @@ module Database.Sqroll.Table.Field
 
 import Data.ByteString (ByteString)
 import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
+import Data.Int (Int64)
 import System.Locale (defaultTimeLocale)
 import qualified Data.ByteString as B
 
@@ -28,6 +29,17 @@ instance Field Int where
     fieldPeek stmt n = fmap fromIntegral (sqlColumnInt64 stmt n)
     {-# INLINE fieldPeek #-}
 
+instance Field Int64 where
+    fieldType    = const SqlInteger
+    fieldIndex   = const False
+    fieldDefault = 0
+
+    fieldPoke = sqlBindInt64
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek = sqlColumnInt64
+    {-# INLINE fieldPeek #-}
+
 instance Field String where
     fieldType    = const SqlText
     fieldIndex   = const False
@@ -44,7 +56,7 @@ instance Field Double where
     fieldIndex   = const False
     fieldDefault = 0
 
-    fieldPoke = sqlBindDouble
+    fieldPoke    = sqlBindDouble
     {-# INLINE fieldPoke #-}
 
     fieldPeek = sqlColumnDouble
