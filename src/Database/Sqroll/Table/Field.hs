@@ -4,6 +4,8 @@ module Database.Sqroll.Table.Field
     ) where
 
 import Data.ByteString (ByteString)
+import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
+import System.Locale (defaultTimeLocale)
 import qualified Data.ByteString as B
 
 import Database.Sqroll.Sqlite3
@@ -69,3 +71,29 @@ instance Field ByteString where
 
     fieldPeek = sqlColumnByteString
     {-# INLINE fieldPeek #-}
+
+instance Field UTCTime where
+    fieldType    = const "TEXT"
+    fieldIndex   = const False
+    fieldDefault = UTCTime (ModifiedJulianDay 0) 0
+
+    fieldPoke stmt n time = sqlBindString stmt n (formatSqliteTime time)
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek stmt = fmap parseSqliteTime . sqlColumnString stmt
+    {-# INLINE fieldPeek #-}
+
+formatSqliteTime :: UTCTime -> String
+formatSqliteTime = take 23 . formatTime defaultTimeLocale sqliteTimeFmt
+{-# INLINE formatSqliteTime #-}
+
+parseSqliteTime :: String -> UTCTime
+parseSqliteTime string =
+    case parseTime defaultTimeLocale sqliteTimeFmt string of
+        Just t  -> t
+        Nothing -> error $ "parseSqliteTime: Could not parse: " ++ string
+{-# INLINE parseSqliteTime #-}
+
+sqliteTimeFmt :: String
+sqliteTimeFmt = "%Y-%m-%d %H:%M:%S%Q"
+{-# INLINE sqliteTimeFmt #-}
