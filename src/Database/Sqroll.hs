@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.Sqroll
-    ( HasTable
+    ( HasTable (..)
 
     , Sqroll (sqrollSql)
 

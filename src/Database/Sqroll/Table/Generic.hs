@@ -8,6 +8,8 @@ module Database.Sqroll.Table.Generic
     ) where
 
 import Control.Applicative ((<$>), (<*>))
+import Data.Char (isUpper, toLower)
+import Data.List (isPrefixOf)
 import GHC.Generics
 
 import Database.Sqroll.Table
@@ -19,8 +21,10 @@ class GNamedTable f where
 instance forall d c a. (Datatype d, GTable (M1 C c a)) =>
         GNamedTable (M1 D d (M1 C c a)) where
     gNamedTable mk unmk =
-        namedTable (datatypeName value) $ (mk . M1) <$> gTable (unM1 . unmk)
+        namedTable (unCamelCase dtn) $ (mk . M1) <$> gTable dtn (unM1 . unmk)
       where
+        dtn = datatypeName value
+
         -- Should not be evalueated since we just use it to get the name of the
         -- datatype.
         value :: M1 D d (M1 C c a) b
@@ -28,14 +32,15 @@ instance forall d c a. (Datatype d, GTable (M1 C c a)) =>
     {-# INLINE gNamedTable #-}
 
 class GTable f where
-    gTable :: (t -> f a) -> Table t (f a)
+    gTable :: String -> (t -> f a) -> Table t (f a)
 
 instance GTable f => GTable (M1 C c f) where
-    gTable sel = M1 <$> gTable (unM1 . sel)
+    gTable dtn sel = M1 <$> gTable dtn (unM1 . sel)
     {-# INLINE gTable #-}
 
 instance forall a s r. (Field a, Selector s) => GTable (M1 S s (K1 r a)) where
-    gTable sel = M1 . K1 <$> field (selName value) (unK1 . unM1 . sel)
+    gTable dtn sel = M1 . K1 <$>
+        field (makeFieldName dtn $ selName value) (unK1 . unM1 . sel)
       where
         -- Should not be evalueated since we just use it to get the name of the
         -- selector.
@@ -44,7 +49,24 @@ instance forall a s r. (Field a, Selector s) => GTable (M1 S s (K1 r a)) where
     {-# INLINE gTable #-}
 
 instance (GTable f, GTable g) => GTable (f :*: g) where
-    gTable sel = (:*:)
-        <$> gTable (\p -> let x :*: _ = sel p in x)
-        <*> gTable (\p -> let _ :*: y = sel p in y)
+    gTable dtn sel = (:*:)
+        <$> gTable dtn (\p -> let x :*: _ = sel p in x)
+        <*> gTable dtn (\p -> let _ :*: y = sel p in y)
     {-# INLINE gTable #-}
+
+makeFieldName :: String -> String -> String
+makeFieldName dtn fn = unCamelCase $
+    if map toLower dtn `isPrefixOf` map toLower fn
+        then drop (length dtn) fn
+        else fn
+
+unCamelCase :: String -> String
+unCamelCase []          = []
+unCamelCase str
+    | null x || null xs = x ++ unCamelCase (downCase xs)
+    | otherwise         = x ++ "_" ++ unCamelCase (downCase xs)
+  where
+    (x, xs) = break isUpper str
+
+    downCase (x : xs) = toLower x : xs
+    downCase []       = []
