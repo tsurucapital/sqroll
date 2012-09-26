@@ -29,6 +29,18 @@ instance Field Int where
     fieldPeek stmt n = fmap fromIntegral (sqlColumnInt64 stmt n)
     {-# INLINE fieldPeek #-}
 
+instance Field Bool where
+    fieldType    = const SqlInteger
+    fieldIndex   = const False
+    fieldDefault = False
+
+    fieldPoke stmt n False = sqlBindInt64 stmt n 0
+    fieldPoke stmt n True  = sqlBindInt64 stmt n 1
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek stmt n = fmap (/= 0) (sqlColumnInt64 stmt n)
+    {-# INLINE fieldPeek #-}
+
 instance Field Int64 where
     fieldType    = const SqlInteger
     fieldIndex   = const False
