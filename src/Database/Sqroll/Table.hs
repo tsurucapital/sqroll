@@ -11,6 +11,7 @@ module Database.Sqroll.Table
       -- * Creating tables
     , namedTable
     , field
+    , mapTable
 
       -- * Inspecting tables
     , tableCreate
@@ -62,6 +63,15 @@ namedTable = NamedTable
 
 field :: (Field a) => String -> (t -> a) -> Table t a
 field name extract = Primitive $ FieldInfo name extract
+
+mapTable :: forall t u. (t -> u) -> (u -> t) -> Table t t -> Table u u
+mapTable mk unmk = Map mk . go
+  where
+    go :: forall a. Table t a -> Table u a
+    go (Map f t)                   = Map f (go t)
+    go (Pure x)                    = Pure x
+    go (App t1 t2)                 = App (go t1) (go t2)
+    go (Primitive (FieldInfo n e)) = Primitive (FieldInfo n (e . unmk))
 
 tableFoldMap :: forall t b. Monoid b
              => (forall a. Field a => FieldInfo t a -> b)

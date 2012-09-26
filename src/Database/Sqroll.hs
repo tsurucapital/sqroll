@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.Sqroll
     ( HasTable (..)
+    , aliasTable
 
     , Sqroll (sqrollSql)
 
@@ -26,6 +27,12 @@ class HasTable t where
 
     default table :: (Generic t, GNamedTable (Rep t)) => NamedTable t
     table = gNamedTable to from
+
+-- | Useful for creating tables for newtypes
+aliasTable :: HasTable t => String -> (t -> u) -> (u -> t) -> NamedTable u
+aliasTable name mk unmk =
+    let NamedTable _ table' = table
+    in NamedTable name $ mapTable mk unmk table'
 
 data Sqroll = Sqroll
     { sqrollSql        :: Sql
