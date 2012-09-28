@@ -15,6 +15,7 @@ module Database.Sqroll
     ) where
 
 import Control.Applicative ((<$>), (<*>))
+import Control.Concurrent.MVar (newMVar, putMVar, takeMVar)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import GHC.Generics (Generic, Rep, from, to)
 
@@ -81,11 +82,15 @@ makeAppend :: forall a. (HasTable a)
            => Sql -> Maybe a -> IO (a -> IO (), IO ())
 makeAppend sql defaultRecord = do
     table' <- prepareTable sql defaultRecord
+    lock   <- newMVar ()
     stmt   <- sqlPrepare sql $ tableInsert table'
     let poker = tablePoke table' stmt
 
     -- This should be reasonably fast
-    let insert x = poker x >> sqlStep stmt >> sqlReset stmt
+    let insert x = do
+            () <- takeMVar lock
+            poker x >> sqlStep stmt >> sqlReset stmt
+            putMVar lock ()
 
     return (insert, sqlFinalize stmt)
 
