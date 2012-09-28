@@ -15,7 +15,8 @@ module Database.Sqroll
     ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Control.Concurrent.MVar (newMVar, putMVar, takeMVar)
+import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
+import Control.Monad.Trans (MonadIO, liftIO)
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import GHC.Generics (Generic, Rep, from, to)
 
@@ -37,22 +38,25 @@ aliasTable name mk unmk =
 
 data Sqroll = Sqroll
     { sqrollSql        :: Sql
+    , sqrollLock       :: MVar ()
     , sqrollFinalizers :: IORef [IO ()]
     }
 
 sqrollOpen :: FilePath -> IO Sqroll
-sqrollOpen filePath = Sqroll <$> sqlOpen filePath <*> newIORef []
+sqrollOpen filePath = Sqroll <$> sqlOpen filePath <*> newMVar () <*> newIORef []
 
 sqrollClose :: Sqroll -> IO ()
 sqrollClose sqroll = do
     sequence_ =<< readIORef (sqrollFinalizers sqroll)
     sqlClose $ sqrollSql sqroll
 
-sqrollTransaction :: Sqroll -> IO a -> IO a
+sqrollTransaction :: MonadIO m => Sqroll -> m a -> m a
 sqrollTransaction sqroll f = do
-    sqlExecute (sqrollSql sqroll) "BEGIN"
+    () <- liftIO $ takeMVar (sqrollLock sqroll)
+    liftIO $ sqlExecute (sqrollSql sqroll) "BEGIN"
     x <- f
-    sqlExecute (sqrollSql sqroll) "COMMIT"
+    liftIO $ sqlExecute (sqrollSql sqroll) "COMMIT"
+    liftIO $ putMVar (sqrollLock sqroll) ()
     return x
 
 sqrollAppend :: HasTable a => Sqroll -> Maybe a -> IO (a -> IO ())
@@ -82,15 +86,11 @@ makeAppend :: forall a. (HasTable a)
            => Sql -> Maybe a -> IO (a -> IO (), IO ())
 makeAppend sql defaultRecord = do
     table' <- prepareTable sql defaultRecord
-    lock   <- newMVar ()
     stmt   <- sqlPrepare sql $ tableInsert table'
     let poker = tablePoke table' stmt
 
     -- This should be reasonably fast
-    let insert x = do
-            () <- takeMVar lock
-            poker x >> sqlStep stmt >> sqlReset stmt
-            putMVar lock ()
+    let insert x = poker x >> sqlStep stmt >> sqlReset stmt
 
     return (insert, sqlFinalize stmt)
 
