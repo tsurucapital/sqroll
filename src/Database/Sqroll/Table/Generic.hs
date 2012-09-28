@@ -9,7 +9,7 @@ module Database.Sqroll.Table.Generic
 
 import Control.Applicative ((<$>), (<*>))
 import Data.Char (isUpper, toLower)
-import Data.List (isPrefixOf)
+import Data.List (intercalate, isPrefixOf)
 import GHC.Generics
 
 import Database.Sqroll.Table
@@ -61,12 +61,32 @@ makeFieldName dtn fn = unCamelCase $
         else fn
 
 unCamelCase :: String -> String
-unCamelCase []          = []
-unCamelCase str
-    | null x || null xs = x ++ unCamelCase (downCase xs)
-    | otherwise         = x ++ "_" ++ unCamelCase (downCase xs)
-  where
-    (x, xs) = break isUpper str
 
-    downCase (y : ys) = toLower y : ys
-    downCase []       = []
+-- | Group a name based on caps in a more or less intuitive way
+--
+-- > caseGroup "Person"      == ["Person"]
+-- > caseGroup "IORef"       == ["IO", "Ref"]
+-- > caseGroup "FooBar"      == ["Foo", "Bar"]
+-- > caseGroup "RequestHTTP" == ["Request", "HTTP"]
+--
+caseGroup :: String -> [String]
+caseGroup = mergeSingles . caseGroup'
+  where
+    mergeSingles xs = case ys of
+        (y : ys) -> merged ++ [y] ++ mergeSingles ys
+        []       -> merged
+      where
+        (ss, ys) = break (not . isSingle) xs
+        merged   = if null ss then [] else [concat ss]
+
+    isSingle [_] = True
+    isSingle _   = False
+
+    caseGroup' []    = []
+    caseGroup' (h : str)
+        | null xs   = [h : x]
+        | null x    = [h] : caseGroup' xs
+        | otherwise = (h : x) : caseGroup' xs
+      where
+        (x, xs) = break isUpper str
+unCamelCase = intercalate "_" . map (map toLower) . caseGroup
