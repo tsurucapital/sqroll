@@ -1,11 +1,14 @@
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
 module Database.Sqroll.Table.Field
     ( Field (..)
     ) where
 
+import Data.Binary (Binary, encode, decode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import Data.Monoid (Monoid, mempty)
 import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
 import Data.Int (Int64)
 import System.Locale (defaultTimeLocale)
@@ -18,6 +21,22 @@ class Field a where
     fieldDefault :: a
     fieldPoke    :: SqlStmt -> Int -> a -> IO ()
     fieldPeek    :: SqlStmt -> Int -> IO a
+
+    -- Defaults: use Binary
+    default fieldType :: a -> SqlType
+    fieldType = const SqlBlob
+
+    default fieldIndex :: a -> Bool
+    fieldIndex = const False
+
+    default fieldDefault :: Monoid a => a
+    fieldDefault = mempty
+
+    default fieldPoke :: Binary a => SqlStmt -> Int -> a -> IO ()
+    fieldPoke stmt n x = sqlBindLazyByteString stmt n (encode x)
+
+    default fieldPeek :: Binary a => SqlStmt -> Int -> IO a
+    fieldPeek stmt n = fmap decode $ sqlColumnLazyByteString stmt n
 
 instance Field Int where
     fieldType    = const SqlInteger
@@ -102,12 +121,10 @@ instance Field BL.ByteString where
     fieldIndex   = const False
     fieldDefault = BL.empty
 
-    fieldPoke stmt n lbs = sqlBindByteString stmt n $
-        B.concat $ BL.toChunks lbs
+    fieldPoke = sqlBindLazyByteString
     {-# INLINE fieldPoke #-}
 
-    fieldPeek stmt n = fmap (BL.fromChunks . return) $
-        sqlColumnByteString stmt n
+    fieldPeek = sqlColumnLazyByteString
     {-# INLINE fieldPeek #-}
 
 instance Field UTCTime where

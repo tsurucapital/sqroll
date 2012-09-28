@@ -24,11 +24,13 @@ module Database.Sqroll.Sqlite3
     , sqlBindDouble
     , sqlBindString
     , sqlBindByteString
+    , sqlBindLazyByteString
     
     , sqlColumnInt64
     , sqlColumnDouble
     , sqlColumnString
     , sqlColumnByteString
+    , sqlColumnLazyByteString
 
     , sqlLastInsertRowId
     , sqlLastSelectRowid
@@ -40,6 +42,9 @@ import Control.Applicative ((<$>))
 import Control.Exception (bracket)
 import Data.Bits ((.|.))
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Internal as BI
+import qualified Data.ByteString.Lazy as BL
 import Data.Int (Int64)
 import Foreign.C.String
 import Foreign.C.Types
@@ -47,7 +52,6 @@ import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
-import qualified Data.ByteString.Internal as BI
 
 type Sql = Ptr ()
 type SqlStmt = Ptr ()
@@ -187,6 +191,11 @@ sqlBindByteString stmt n bs = withForeignPtr fptr $ \ptr ->
     (fptr, o, l) = BI.toForeignPtr bs
 {-# INLINE sqlBindByteString #-}
 
+sqlBindLazyByteString :: SqlStmt -> Int -> BL.ByteString -> IO ()
+sqlBindLazyByteString stmt n lbs = sqlBindByteString stmt n $
+    B.concat $ BL.toChunks lbs
+{-# INLINE sqlBindLazyByteString #-}
+
 foreign import ccall "sqlite3.h sqlite3_column_int64" sqlite3_column_int64
     :: SqlStmt -> CInt -> IO CLLong
 
@@ -230,6 +239,11 @@ sqlColumnByteString stmt n = do
   where
     n' = fromIntegral n
 {-# INLINE sqlColumnByteString #-}
+
+sqlColumnLazyByteString :: SqlStmt -> Int -> IO BL.ByteString
+sqlColumnLazyByteString stmt n = fmap (BL.fromChunks . return) $
+    sqlColumnByteString stmt n
+{-# INLINE sqlColumnLazyByteString #-}
 
 foreign import ccall "sqlite3.h sqlite3_finalize" sqlite3_finalize
     :: SqlStmt -> IO SqlStatus

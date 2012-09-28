@@ -72,12 +72,12 @@ unCamelCase :: String -> String
 caseGroup :: String -> [String]
 caseGroup = mergeSingles . caseGroup'
   where
-    mergeSingles xs = case ys of
+    mergeSingles xs = case rest of
         (y : ys) -> merged ++ [y] ++ mergeSingles ys
         []       -> merged
       where
-        (ss, ys) = break (not . isSingle) xs
-        merged   = if null ss then [] else [concat ss]
+        (ss, rest) = break (not . isSingle) xs
+        merged     = if null ss then [] else [concat ss]
 
     isSingle [_] = True
     isSingle _   = False
