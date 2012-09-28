@@ -4,10 +4,11 @@ module Database.Sqroll.Table.Field
     ) where
 
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
 import Data.Int (Int64)
 import System.Locale (defaultTimeLocale)
-import qualified Data.ByteString as B
 
 import Database.Sqroll.Sqlite3
 
@@ -94,6 +95,19 @@ instance Field ByteString where
     {-# INLINE fieldPoke #-}
 
     fieldPeek = sqlColumnByteString
+    {-# INLINE fieldPeek #-}
+
+instance Field BL.ByteString where
+    fieldType    = const SqlBlob
+    fieldIndex   = const False
+    fieldDefault = BL.empty
+
+    fieldPoke stmt n lbs = sqlBindByteString stmt n $
+        B.concat $ BL.toChunks lbs
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek stmt n = fmap (BL.fromChunks . return) $
+        sqlColumnByteString stmt n
     {-# INLINE fieldPeek #-}
 
 instance Field UTCTime where
