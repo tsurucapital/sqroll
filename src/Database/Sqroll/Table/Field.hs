@@ -1,5 +1,6 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Database.Sqroll.Table.Field
     ( Field (..)
     ) where
@@ -125,6 +126,22 @@ instance Field BL.ByteString where
     {-# INLINE fieldPoke #-}
 
     fieldPeek = sqlColumnLazyByteString
+    {-# INLINE fieldPeek #-}
+
+instance forall a. Field a => Field (Maybe a) where
+    fieldType    = const $ fieldType  (undefined :: a)
+    fieldIndex   = const $ fieldIndex (undefined :: a)
+    fieldDefault = Nothing
+
+    fieldPoke stmt n Nothing  = sqlBindNothing stmt n
+    fieldPoke stmt n (Just x) = fieldPoke stmt n x
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek stmt n = do
+        nothing <- sqlColumnIsNothing stmt n
+        if nothing
+            then return Nothing
+            else fmap Just $ fieldPeek stmt n
     {-# INLINE fieldPeek #-}
 
 instance Field UTCTime where

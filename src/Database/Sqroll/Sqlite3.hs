@@ -25,12 +25,14 @@ module Database.Sqroll.Sqlite3
     , sqlBindString
     , sqlBindByteString
     , sqlBindLazyByteString
+    , sqlBindNothing
     
     , sqlColumnInt64
     , sqlColumnDouble
     , sqlColumnString
     , sqlColumnByteString
     , sqlColumnLazyByteString
+    , sqlColumnIsNothing
 
     , sqlLastInsertRowId
     , sqlLastSelectRowid
@@ -196,6 +198,14 @@ sqlBindLazyByteString stmt n lbs = sqlBindByteString stmt n $
     B.concat $ BL.toChunks lbs
 {-# INLINE sqlBindLazyByteString #-}
 
+foreign import ccall "sqlite3.h sqlite3_bind_null" sqlite3_bind_null
+    :: SqlStmt -> CInt -> IO SqlStatus
+
+sqlBindNothing :: SqlStmt -> Int -> IO ()
+sqlBindNothing stmt n = sqlite3_bind_null stmt (fromIntegral n) >>=
+    orDie "sqlite3_bind_null"
+{-# INLINE sqlBindNothing #-}
+
 foreign import ccall "sqlite3.h sqlite3_column_int64" sqlite3_column_int64
     :: SqlStmt -> CInt -> IO CLLong
 
@@ -244,6 +254,15 @@ sqlColumnLazyByteString :: SqlStmt -> Int -> IO BL.ByteString
 sqlColumnLazyByteString stmt n = fmap (BL.fromChunks . return) $
     sqlColumnByteString stmt n
 {-# INLINE sqlColumnLazyByteString #-}
+
+foreign import ccall "sqlite3.h sqlite3_column_type" sqlite3_column_type
+    :: SqlStmt -> CInt -> IO CInt
+
+sqlColumnIsNothing :: SqlStmt -> Int -> IO Bool
+sqlColumnIsNothing stmt n = do
+    t <- sqlite3_column_type stmt (fromIntegral n)
+    return $ t == 5  -- SQLITE_NULL
+{-# INLINE sqlColumnIsNothing #-}
 
 foreign import ccall "sqlite3.h sqlite3_finalize" sqlite3_finalize
     :: SqlStmt -> IO SqlStatus
