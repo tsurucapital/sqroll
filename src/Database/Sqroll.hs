@@ -12,6 +12,7 @@ module Database.Sqroll
     , sqrollTransaction
     , sqrollAppend
     , sqrollTail
+    , sqrollSelect
     ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -71,6 +72,12 @@ sqrollTail sqroll defaultRecord f = do
     modifyIORef (sqrollFinalizers sqroll) (finalizer :)
     return tail'
 
+sqrollSelect :: HasTable a => Sqroll -> Maybe a -> IO (SqlKey a -> IO a)
+sqrollSelect sqroll defaultRecord = do
+    (select, finalizer) <- makeSelect (sqrollSql sqroll) defaultRecord
+    modifyIORef (sqrollFinalizers sqroll) (finalizer :)
+    return select
+
 -- | Create tables and indexes (if not exist...), ensure we have the correct
 -- defaults
 prepareTable :: HasTable a
@@ -120,3 +127,18 @@ makeTail sql defaultRecord f = do
             sqlReset stmt
 
     return (tail', sqlFinalize stmt)
+
+makeSelect :: HasTable a => Sql -> Maybe a -> IO (SqlKey a -> IO a, IO ())
+makeSelect sql defaultRecord = do
+    table' <- prepareTable sql defaultRecord
+    stmt   <- sqlPrepare sql $ tableSelect table' ++ " WHERE rowid = ?"
+    let peeker = tablePeek table' stmt
+
+    let select rowid = do
+            sqlBindInt64 stmt 1 (unSqlRowId rowid)
+            sqlStep_ stmt
+            x <- peeker
+            sqlReset stmt
+            return x
+
+    return (select, sqlFinalize stmt)
