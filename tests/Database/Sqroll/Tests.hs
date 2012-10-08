@@ -21,19 +21,11 @@ tests :: Test
 tests = testGroup "Database.Sqroll.Tests"
     [ testCase "testAppendTailUsers" testAppendTailUsers
     , testCase "testModifiedTypes"   testModifiedTypes
+    , testCase "testMaybeField"      testMaybeField
     ]
 
 testAppendTailUsers :: Assertion
-testAppendTailUsers = withTmpScroll $ \sqroll -> do
-    ref    <- newIORef []
-    tail'  <- sqrollTail sqroll Nothing (\u -> modifyIORef ref (u :))
-    append <- sqrollAppend sqroll Nothing
-
-    mapM_ append testUsers
-    tail'
-
-    testUsers' <- reverse <$> readIORef ref
-    testUsers @=? testUsers'
+testAppendTailUsers = testAppendTail testUsers
 
 testModifiedTypes :: Assertion
 testModifiedTypes = do
@@ -56,6 +48,9 @@ testModifiedTypes = do
 
     removeFile tmpPath
 
+testMaybeField :: Assertion
+testMaybeField = testAppendTail testKittens
+
 withTmpScroll :: (Sqroll -> IO a) -> IO a
 withTmpScroll f = do
     (tmpPath, sqroll) <- sqrollOpenTmp
@@ -70,3 +65,17 @@ sqrollOpenTmp = do
     let tmpPath = tmpDir </> "sqroll-test.db"
     sqroll <- sqrollOpen tmpPath
     return (tmpPath, sqroll)
+
+sqrollTailIORef :: HasTable a => Sqroll -> IO (IO [a])
+sqrollTailIORef sqroll = do
+    ref    <- newIORef []
+    tail'  <- sqrollTail sqroll Nothing (\u -> modifyIORef ref (u :))
+    return $ tail' >> reverse <$> readIORef ref
+
+testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
+testAppendTail items = withTmpScroll $ \sqroll -> do
+    tail'  <- sqrollTailIORef sqroll
+    append <- sqrollAppend sqroll Nothing
+    mapM_ append items
+    items' <- tail'
+    items @=? items'

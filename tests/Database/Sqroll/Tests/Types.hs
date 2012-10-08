@@ -2,6 +2,9 @@
 module Database.Sqroll.Tests.Types
     ( User (..)
     , testUsers
+
+    , Kitten (..)
+    , testKittens
     ) where
 
 import Data.ByteString (ByteString)
@@ -24,3 +27,12 @@ testUsers = map mkUser [0 .. 10]
   where
     mkUser i = User
         ("John" ++ show i) ("Doe" ++ show i) i (B.pack [0 .. fromIntegral i])
+
+data Kitten = Kitten
+    { kittenWoof :: Maybe String
+    } deriving (Eq, Generic, Show)
+
+instance HasTable Kitten
+
+testKittens :: [Kitten]
+testKittens = [Kitten Nothing, Kitten (Just "Woof")]
