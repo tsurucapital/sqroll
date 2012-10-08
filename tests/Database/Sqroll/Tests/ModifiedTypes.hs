@@ -6,7 +6,6 @@ module Database.Sqroll.Tests.ModifiedTypes
     , defaultUser
     ) where
 
-import Data.ByteString (ByteString)
 import GHC.Generics (Generic)
 
 import Database.Sqroll (HasTable)

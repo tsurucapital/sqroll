@@ -19,8 +19,9 @@ Library
     Database.Sqroll
     Database.Sqroll.Sqlite3
     Database.Sqroll.Table
-    Database.Sqroll.Table.Generic
     Database.Sqroll.Table.Field
+    Database.Sqroll.Table.Generic
+    Database.Sqroll.Table.Naming
 
   Build-depends:
     base       >= 4   && < 5,
@@ -43,7 +44,10 @@ Test-suite sqroll-tests
   Type:           exitcode-stdio-1.0
 
   Other-modules:
+    Database.Sqroll.Table.Naming.Tests
     Database.Sqroll.Tests
+    Database.Sqroll.Tests.ModifiedTypes
+    Database.Sqroll.Tests.Types
 
   Build-depends:
     HUnit                >= 1.2 && < 1.3,
