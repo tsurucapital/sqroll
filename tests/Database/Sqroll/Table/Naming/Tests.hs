@@ -10,7 +10,7 @@ import Test.HUnit (Assertion, (@=?))
 import Database.Sqroll.Table.Naming
 
 tests :: Test
-tests = testGroup "Database.Sqroll.Table.Naming"
+tests = testGroup "Database.Sqroll.Table.Naming.Tests"
     [ testCase "testUnCamelCase" testUnCamelCase
     ]
 
