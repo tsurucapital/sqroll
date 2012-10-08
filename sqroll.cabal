@@ -26,6 +26,8 @@ Library
     base       >= 4   && < 5,
     binary     >= 0.5 && < 0.6,
     bytestring >= 0.9 && < 0.11,
+    directory  >= 1.1 && < 1.2,
+    filepath   >= 1.3 && < 1.4,
     ghc-prim   >= 0.2 && < 0.3,
     mtl        >= 2.0 && < 2.2,
     old-locale >= 1.0 && < 1.1,
@@ -33,3 +35,31 @@ Library
 
  Pkgconfig-depends:
    sqlite3
+
+Test-suite sqroll-tests
+  Ghc-options:    -Wall
+  Hs-source-dirs: src tests
+  Main-is:        TestSuite.hs
+  Type:           exitcode-stdio-1.0
+
+  Other-modules:
+    Database.Sqroll.Tests
+
+  Build-depends:
+    HUnit                >= 1.2 && < 1.3,
+    test-framework       >= 0.4 && < 0.7,
+    test-framework-hunit >= 0.2 && < 0.3,
+    -- Copied from regular dependencies...
+    base       >= 4   && < 5,
+    binary     >= 0.5 && < 0.6,
+    bytestring >= 0.9 && < 0.11,
+    directory  >= 1.1 && < 1.2,
+    filepath   >= 1.3 && < 1.4,
+    ghc-prim   >= 0.2 && < 0.3,
+    mtl        >= 2.0 && < 2.2,
+    old-locale >= 1.0 && < 1.1,
+    time       >= 1.4 && < 1.5
+
+  -- Pkgconfig-depends doesn't seem to work for test suites?
+  Extra-libraries:
+    sqlite3

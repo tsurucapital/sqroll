@@ -61,6 +61,7 @@ makeFieldName dtn fn = unCamelCase $
         else fn
 
 unCamelCase :: String -> String
+unCamelCase = intercalate "_" . map (map toLower) . caseGroup
 
 -- | Group a name based on caps in a more or less intuitive way
 --
@@ -89,4 +90,3 @@ caseGroup = mergeSingles . caseGroup'
         | otherwise = (h : x) : caseGroup' xs
       where
         (x, xs) = break isUpper str
-unCamelCase = intercalate "_" . map (map toLower) . caseGroup
