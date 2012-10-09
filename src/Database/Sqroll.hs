@@ -8,6 +8,7 @@ module Database.Sqroll
     , Sqroll (sqrollSql)
 
     , sqrollOpen
+    , sqrollOpenWith
     , sqrollClose
     , sqrollTransaction
     , sqrollAppend
@@ -44,7 +45,11 @@ data Sqroll = Sqroll
     }
 
 sqrollOpen :: FilePath -> IO Sqroll
-sqrollOpen filePath = Sqroll <$> sqlOpen filePath <*> newMVar () <*> newIORef []
+sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
+
+sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
+sqrollOpenWith filePath flags =
+    Sqroll <$> sqlOpen filePath flags <*> newMVar () <*> newIORef []
 
 sqrollClose :: Sqroll -> IO ()
 sqrollClose sqroll = do

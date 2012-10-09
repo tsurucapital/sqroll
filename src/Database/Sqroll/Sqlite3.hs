@@ -5,9 +5,12 @@ module Database.Sqroll.Sqlite3
     , SqlStatus
     , SqlRowId (..)
     , SqlKey
-    , SqlType (..)
 
+    , SqlType (..)
     , sqlTypeToString
+
+    , SqlOpenFlag (..)
+    , sqlDefaultOpenFlags
     
     , sqlOpen
     , sqlClose
@@ -48,6 +51,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as BI
 import qualified Data.ByteString.Lazy as BL
 import Data.Int (Int64)
+import Data.List (foldl')
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -77,16 +81,29 @@ sqlTypeToString SqlText    = "TEXT"
 sqlTypeToString SqlDouble  = "DOUBLE"
 sqlTypeToString SqlBlob    = "BLOB"
 
+data SqlOpenFlag
+    = SqlOpenReadOnly
+    | SqlOpenReadWrite
+    | SqlOpenCreate
+    deriving (Show)
+
+sqlDefaultOpenFlags :: [SqlOpenFlag]
+sqlDefaultOpenFlags = [SqlOpenReadWrite, SqlOpenCreate]
+
+sqlOpenFlagCode :: SqlOpenFlag -> CInt
+sqlOpenFlagCode SqlOpenReadOnly  = 0x00000001
+sqlOpenFlagCode SqlOpenReadWrite = 0x00000002
+sqlOpenFlagCode SqlOpenCreate    = 0x00000004
+
 foreign import ccall "sqlite3.h sqlite3_open_v2" sqlite3_open_v2
     :: CString -> Ptr Sql -> CInt -> CString -> IO SqlStatus
 
-sqlOpen :: FilePath -> IO Sql
-sqlOpen fp = alloca $ \db -> withCString fp $ \cfp -> do
-    sqlite3_open_v2 cfp db flags nullPtr >>= orDie "sqlite3_open"
+sqlOpen :: FilePath -> [SqlOpenFlag] -> IO Sql
+sqlOpen fp flags = alloca $ \db -> withCString fp $ \cfp -> do
+    sqlite3_open_v2 cfp db flag nullPtr >>= orDie "sqlite3_open"
     peek db
   where
-    flags = 0x00000002  -- SQL_OPEN_READWRITE
-        .|. 0x00000004  -- SQLITE_OPEN_CREATE
+    flag = foldl' (.|.) 0 $ map sqlOpenFlagCode flags
 {-# INLINE sqlOpen #-}
 
 foreign import ccall "sqlite3.h sqlite3_close" sqlite3_close

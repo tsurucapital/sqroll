@@ -22,7 +22,7 @@ testSqlTableColumns = withTmpSql $ \sql -> do
 
 withTmpSql :: (Sql -> IO a) -> IO a
 withTmpSql f = do
-    sql <- sqlOpen ":memory:"
+    sql <- sqlOpen ":memory:" sqlDefaultOpenFlags
     x   <- f sql
     sqlClose sql
     return x
