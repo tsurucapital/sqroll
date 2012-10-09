@@ -45,6 +45,7 @@ module Database.Sqroll.Sqlite3
 
 import Control.Applicative ((<$>))
 import Control.Exception (bracket)
+import Control.Monad (when)
 import Data.Bits ((.|.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -85,23 +86,31 @@ data SqlOpenFlag
     = SqlOpenReadOnly
     | SqlOpenReadWrite
     | SqlOpenCreate
-    deriving (Show)
+    | SqlOpenWal
+    deriving (Eq, Show)
 
 sqlDefaultOpenFlags :: [SqlOpenFlag]
-sqlDefaultOpenFlags = [SqlOpenReadWrite, SqlOpenCreate]
+sqlDefaultOpenFlags = [SqlOpenReadWrite, SqlOpenCreate, SqlOpenWal]
 
 sqlOpenFlagCode :: SqlOpenFlag -> CInt
 sqlOpenFlagCode SqlOpenReadOnly  = 0x00000001
 sqlOpenFlagCode SqlOpenReadWrite = 0x00000002
 sqlOpenFlagCode SqlOpenCreate    = 0x00000004
+sqlOpenFlagCode SqlOpenWal       = 0x00000000
 
 foreign import ccall "sqlite3.h sqlite3_open_v2" sqlite3_open_v2
     :: CString -> Ptr Sql -> CInt -> CString -> IO SqlStatus
 
 sqlOpen :: FilePath -> [SqlOpenFlag] -> IO Sql
-sqlOpen fp flags = alloca $ \db -> withCString fp $ \cfp -> do
-    sqlite3_open_v2 cfp db flag nullPtr >>= orDie "sqlite3_open"
-    peek db
+sqlOpen fp flags = do
+    sql <- alloca $ \db -> withCString fp $ \cfp -> do
+        sqlite3_open_v2 cfp db flag nullPtr >>= orDie "sqlite3_open"
+        peek db
+
+    when (SqlOpenWal `elem` flags) $
+        sqlExecute sql "PRAGMA journal_mode=WAL;"
+
+    return sql
   where
     flag = foldl' (.|.) 0 $ map sqlOpenFlagCode flags
 {-# INLINE sqlOpen #-}
