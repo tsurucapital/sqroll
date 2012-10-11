@@ -22,6 +22,7 @@ tests = testGroup "Database.Sqroll.Tests"
     [ testCase "testAppendTailUsers" testAppendTailUsers
     , testCase "testModifiedTypes"   testModifiedTypes
     , testCase "testMaybeField"      testMaybeField
+    , testCase "testAliasTable"      testAliasTable
     ]
 
 testAppendTailUsers :: Assertion
@@ -50,6 +51,9 @@ testModifiedTypes = do
 
 testMaybeField :: Assertion
 testMaybeField = testAppendTail testKittens
+
+testAliasTable :: Assertion
+testAliasTable = testAppendTail $ map Dog testKittens
 
 withTmpScroll :: (Sqroll -> IO a) -> IO a
 withTmpScroll f = do
