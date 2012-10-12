@@ -103,7 +103,7 @@ tableIndexes table = tableFoldMap tableIndex table
   where
     tableIndex :: forall a. Field a => FieldInfo t a -> [String]
     tableIndex fi = do
-        guard $ fieldIndex (undefined :: a)
+        guard $ not $ null $ fieldRefers (undefined :: a)
         let idxName = "index_" ++ tableName table ++ "_" ++ fieldName fi
         return $
             "CREATE INDEX IF NOT EXISTS " ++ idxName ++ " ON " ++

@@ -17,6 +17,7 @@ Library
 
   Exposed-modules:     
     Database.Sqroll
+    Database.Sqroll.Internal
     Database.Sqroll.Sqlite3
     Database.Sqroll.Table
     Database.Sqroll.Table.Field

@@ -17,8 +17,8 @@ import System.Locale (defaultTimeLocale)
 import Database.Sqroll.Sqlite3
 
 class Field a where
-    fieldType    :: a -> SqlType  -- Should work with 'undefined'
-    fieldIndex   :: a -> Bool     -- Should work with 'undefined'
+    fieldType    :: a -> SqlType   -- Should work with 'undefined'
+    fieldRefers  :: a -> [String]  -- Should work with 'undefined'
     fieldDefault :: a
     fieldPoke    :: SqlStmt -> Int -> a -> IO ()
     fieldPeek    :: SqlStmt -> Int -> IO a
@@ -27,8 +27,8 @@ class Field a where
     default fieldType :: a -> SqlType
     fieldType = const SqlBlob
 
-    default fieldIndex :: a -> Bool
-    fieldIndex = const False
+    default fieldRefers :: a -> [String]
+    fieldRefers = const []
 
     default fieldDefault :: Monoid a => a
     fieldDefault = mempty
@@ -41,7 +41,6 @@ class Field a where
 
 instance Field Int where
     fieldType    = const SqlInteger
-    fieldIndex   = const False
     fieldDefault = 0
 
     fieldPoke stmt n = sqlBindInt64 stmt n . fromIntegral
@@ -52,7 +51,6 @@ instance Field Int where
 
 instance Field Bool where
     fieldType    = const SqlInteger
-    fieldIndex   = const False
     fieldDefault = False
 
     fieldPoke stmt n False = sqlBindInt64 stmt n 0
@@ -64,7 +62,6 @@ instance Field Bool where
 
 instance Field Int64 where
     fieldType    = const SqlInteger
-    fieldIndex   = const False
     fieldDefault = 0
 
     fieldPoke = sqlBindInt64
@@ -75,7 +72,6 @@ instance Field Int64 where
 
 instance Field String where
     fieldType    = const SqlText
-    fieldIndex   = const False
     fieldDefault = ""
 
     fieldPoke = sqlBindString
@@ -86,7 +82,6 @@ instance Field String where
 
 instance Field Double where
     fieldType    = const SqlDouble
-    fieldIndex   = const False
     fieldDefault = 0
 
     fieldPoke    = sqlBindDouble
@@ -95,20 +90,8 @@ instance Field Double where
     fieldPeek = sqlColumnDouble
     {-# INLINE fieldPeek #-}
 
-instance Field SqlRowId where
-    fieldType    = const SqlInteger
-    fieldIndex   = const True
-    fieldDefault = SqlRowId 0
-
-    fieldPoke stmt n (SqlRowId x) = sqlBindInt64 stmt n x
-    {-# INLINE fieldPoke #-}
-
-    fieldPeek stmt = fmap SqlRowId . sqlColumnInt64 stmt
-    {-# INLINE fieldPeek #-}
-
 instance Field ByteString where
     fieldType    = const SqlBlob
-    fieldIndex   = const False
     fieldDefault = B.empty
 
     fieldPoke = sqlBindByteString
@@ -119,7 +102,6 @@ instance Field ByteString where
 
 instance Field BL.ByteString where
     fieldType    = const SqlBlob
-    fieldIndex   = const False
     fieldDefault = BL.empty
 
     fieldPoke = sqlBindLazyByteString
@@ -129,8 +111,7 @@ instance Field BL.ByteString where
     {-# INLINE fieldPeek #-}
 
 instance forall a. Field a => Field (Maybe a) where
-    fieldType    = const $ fieldType  (undefined :: a)
-    fieldIndex   = const $ fieldIndex (undefined :: a)
+    fieldType    = const $ fieldType (undefined :: a)
     fieldDefault = Nothing
 
     fieldPoke stmt n Nothing  = sqlBindNothing stmt n
@@ -146,7 +127,6 @@ instance forall a. Field a => Field (Maybe a) where
 
 instance Field UTCTime where
     fieldType    = const SqlText
-    fieldIndex   = const False
     fieldDefault = UTCTime (ModifiedJulianDay 0) 0
 
     fieldPoke stmt n time = sqlBindString stmt n (formatSqliteTime time)

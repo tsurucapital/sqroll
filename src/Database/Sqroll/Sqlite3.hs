@@ -3,8 +3,7 @@ module Database.Sqroll.Sqlite3
     ( Sql
     , SqlStmt
     , SqlStatus
-    , SqlRowId (..)
-    , SqlKey
+    , SqlRowId
 
     , SqlType (..)
     , sqlTypeToString
@@ -64,10 +63,7 @@ type Sql = Ptr ()
 type SqlStmt = Ptr ()
 type SqlStatus = CInt
 
-newtype SqlRowId = SqlRowId {unSqlRowId :: Int64}
-    deriving (Show)
-
-type SqlKey a = SqlRowId
+type SqlRowId = Int64
 
 data SqlType
     = SqlInteger
@@ -294,11 +290,11 @@ foreign import ccall "sqlite3.h sqlite3_finalize" sqlite3_finalize
     :: SqlStmt -> IO SqlStatus
 
 sqlLastInsertRowId :: Sql -> IO SqlRowId
-sqlLastInsertRowId = fmap (SqlRowId . fromIntegral) . sqlite3_last_insert_rowid
+sqlLastInsertRowId = fmap fromIntegral . sqlite3_last_insert_rowid
 {-# INLINE sqlLastInsertRowId #-}
 
 sqlLastSelectRowid :: SqlStmt -> IO SqlRowId
-sqlLastSelectRowid stmt = fmap SqlRowId $ sqlColumnInt64 stmt 0
+sqlLastSelectRowid stmt = sqlColumnInt64 stmt 0
 {-# INLINE sqlLastSelectRowid #-}
 
 -- | Get all the column names for a given table

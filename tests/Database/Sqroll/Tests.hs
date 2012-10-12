@@ -40,7 +40,7 @@ testModifiedTypes = do
     -- Read a modified user type
     sqroll' <- sqrollOpen tmpPath
     select  <- sqrollSelect sqroll' (Just ModifiedTypes.defaultUser)
-    user    <- select rowid
+    user    <- select $ SqlKey rowid
     sqrollClose sqroll'
 
     -- Check that they are equal, defaults worked, everyone is happy, rainbows,
