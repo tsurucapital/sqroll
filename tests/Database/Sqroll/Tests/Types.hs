@@ -7,13 +7,14 @@ module Database.Sqroll.Tests.Types
     , testKittens
 
     , Dog (..)
+    , DogOwner (..)
     ) where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import GHC.Generics (Generic)
 
-import Database.Sqroll (HasTable (..), aliasTable)
+import Database.Sqroll (HasTable (..), SqlKey, aliasTable)
 
 data User = User
     { userFirstName :: String
@@ -44,3 +45,10 @@ newtype Dog = Dog {unDog :: Kitten}
 
 instance HasTable Dog where
     table = aliasTable "dog" Dog unDog
+
+data DogOwner = DogOwner
+    { dogOwnerName :: String
+    , dogOwnerDog  :: SqlKey Dog
+    } deriving (Eq, Generic, Show)
+
+instance HasTable DogOwner

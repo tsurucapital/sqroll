@@ -2,7 +2,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.Sqroll.Internal
-    ( HasTable (..)
+    ( NamedTable (..)
+
+    , HasTable (..)
     , aliasTable
 
     , SqlKey (..)
@@ -42,7 +44,7 @@ aliasTable name mk unmk =
 
 -- Maybe rename to SqrollKey?
 newtype SqlKey a = SqlKey {unSqlKey :: SqlRowId}
-    deriving (Show)
+    deriving (Eq, Show)
 
 instance forall a. HasTable a => Field (SqlKey a) where
     fieldType    = const SqlInteger

@@ -1,5 +1,7 @@
 module Database.Sqroll
-    ( HasTable (..)
+    ( NamedTable (..)
+
+    , HasTable (..)
     , aliasTable
 
     , SqlKey (..)

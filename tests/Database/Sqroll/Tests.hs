@@ -15,6 +15,7 @@ import System.FilePath ((</>))
 import Database.Sqroll
 import qualified Database.Sqroll.Tests.ModifiedTypes as ModifiedTypes
 import Database.Sqroll.Sqlite3
+import Database.Sqroll.Table
 import Database.Sqroll.Tests.Types
 
 tests :: Test
@@ -23,6 +24,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testModifiedTypes"   testModifiedTypes
     , testCase "testMaybeField"      testMaybeField
     , testCase "testAliasTable"      testAliasTable
+    , testCase "testTableIndexes"    testTableIndexes
     ]
 
 testAppendTailUsers :: Assertion
@@ -54,6 +56,11 @@ testMaybeField = testAppendTail testKittens
 
 testAliasTable :: Assertion
 testAliasTable = testAppendTail $ map Dog testKittens
+
+testTableIndexes :: Assertion
+testTableIndexes =
+    ["CREATE INDEX IF NOT EXISTS index_dog_owner_dog ON dog_owner (dog)"] @=?
+    tableIndexes (table :: NamedTable DogOwner)
 
 withTmpScroll :: (Sqroll -> IO a) -> IO a
 withTmpScroll f = do
