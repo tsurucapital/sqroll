@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.Sqroll.Table.Field
     ( Field (..)
+    , fieldIndexed
     ) where
 
 import Data.Binary (Binary, encode, decode)
@@ -134,6 +135,9 @@ instance Field UTCTime where
 
     fieldPeek stmt = fmap parseSqliteTime . sqlColumnString stmt
     {-# INLINE fieldPeek #-}
+
+fieldIndexed :: Field a => a -> Bool
+fieldIndexed = not . null . fieldRefers
 
 formatSqliteTime :: UTCTime -> String
 formatSqliteTime = take 23 . formatTime defaultTimeLocale sqliteTimeFmt
