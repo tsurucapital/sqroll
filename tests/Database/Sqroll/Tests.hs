@@ -40,9 +40,9 @@ testModifiedTypes = do
     sqrollClose sqroll
 
     -- Read a modified user type
+    -- TODO: set default to (Just ModifiedTypes.defaultUser)
     sqroll' <- sqrollOpen tmpPath
-    select  <- sqrollSelect sqroll' (Just ModifiedTypes.defaultUser)
-    user    <- select $ SqlKey rowid
+    user    <- sqrollSelect sqroll' (SqlKey rowid)
     sqrollClose sqroll'
 
     -- Check that they are equal, defaults worked, everyone is happy, rainbows,
@@ -75,7 +75,7 @@ testSqrollByKey = withTmpScroll $ \sqroll -> do
     key <- SqlKey <$> sqlLastInsertRowId (sqrollSql sqroll)
 
     sqrollAppend sqroll $ DogOwner "Jasper" key
-    sqrollAppend sqroll  $ DogOwner "Marit" (SqlKey $ unSqlKey key + 1)
+    sqrollAppend sqroll $ DogOwner "Marit" (SqlKey $ unSqlKey key + 1)
 
     owners <- sqrollByKey sqroll Nothing key
     [DogOwner "Jasper" key] @=? owners

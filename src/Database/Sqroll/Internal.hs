@@ -26,7 +26,7 @@ import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
-import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import GHC.Generics (Generic, Rep, from, to)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -65,6 +65,7 @@ instance forall a. HasTable a => Field (SqlKey a) where
 data SqrollCache a = SqrollCache
     { sqrollCacheAppend   :: a -> IO ()
     , sqrollCacheTail     :: SqlKey a -> IO ([a], SqlKey a)
+    , sqrollCacheSelect   :: SqlKey a -> IO a
     , sqrollCacheFinalize :: IO ()
     }
 
@@ -98,9 +99,17 @@ makeSqrollCacheFor sql defaultRecord = do
             sqlReset tailStmt
             return (xs, SqlKey (rowid' + 1))
 
+        select (SqlKey rowid) = do
+            sqlBindInt64 tailStmt 1 rowid
+            sqlStep_ tailStmt
+            x <- peeker
+            sqlReset tailStmt
+            return x
+
     return SqrollCache
         { sqrollCacheAppend   = append
         , sqrollCacheTail     = tail'
+        , sqrollCacheSelect  = select
         , sqrollCacheFinalize = do
             sqlFinalize appendStmt
             sqlFinalize tailStmt
@@ -155,17 +164,19 @@ sqrollAppend :: HasTable a => Sqroll -> a -> IO ()
 sqrollAppend sqroll x = do
     cache <- sqrollGetCache sqroll
     sqrollCacheAppend cache x
+{-# INLINE sqrollAppend #-}
 
 sqrollTail :: HasTable a => Sqroll -> SqlKey a -> IO ([a], SqlKey a)
 sqrollTail sqroll key = do
     cache <- sqrollGetCache sqroll
     sqrollCacheTail cache key
+{-# INLINE sqrollTail #-}
 
-sqrollSelect :: HasTable a => Sqroll -> Maybe a -> IO (SqlKey a -> IO a)
-sqrollSelect sqroll defaultRecord = do
-    (select, finalizer) <- makeSelect (sqrollSql sqroll) defaultRecord
-    modifyIORef (sqrollFinalizers sqroll) (finalizer :)
-    return select
+sqrollSelect :: HasTable a => Sqroll -> SqlKey a -> IO a
+sqrollSelect sqroll key = do
+    cache <- sqrollGetCache sqroll
+    sqrollCacheSelect cache key
+{-# INLINE sqrollSelect #-}
 
 sqrollByKey :: forall a b. (HasTable a, HasTable b)
             => Sqroll -> Maybe a -> SqlKey b -> IO [a]
@@ -188,18 +199,3 @@ sqrollByKey sqroll defaultRecord key = do
     sql          = sqrollSql sqroll
     error'       = error . ("Database.Sqroll.Internal.sqrollByKey: " ++)
     foreignTable = table :: NamedTable b
-
-makeSelect :: HasTable a => Sql -> Maybe a -> IO (SqlKey a -> IO a, IO ())
-makeSelect sql defaultRecord = do
-    table' <- prepareTable sql defaultRecord
-    stmt   <- sqlPrepare sql $ tableSelect table' ++ " WHERE rowid = ?"
-    let peeker = tablePeek table' stmt
-
-    let select rowid = do
-            sqlBindInt64 stmt 1 (unSqlKey rowid)
-            sqlStep_ stmt
-            x <- peeker
-            sqlReset stmt
-            return x
-
-    return (select, sqlFinalize stmt)
