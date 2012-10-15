@@ -1,4 +1,5 @@
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Database.Sqroll.Internal
@@ -23,8 +24,11 @@ module Database.Sqroll.Internal
 import Control.Applicative ((<$>), (<*>))
 import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
 import Control.Monad.Trans (MonadIO, liftIO)
+import Data.HashMap.Lazy (HashMap)
+import qualified Data.HashMap.Lazy as HM
 import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import GHC.Generics (Generic, Rep, from, to)
+import Unsafe.Coerce (unsafeCoerce)
 
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
@@ -58,9 +62,40 @@ instance forall a. HasTable a => Field (SqlKey a) where
     fieldPeek stmt = fmap SqlKey . sqlColumnInt64 stmt
     {-# INLINE fieldPeek #-}
 
+data SqrollCache a = SqrollCache
+    { sqrollCacheAppend   :: a -> IO ()
+    , sqrollCacheFinalize :: IO ()
+    }
+
+-- | Create tables and indexes (if not exist...), ensure we have the correct
+-- defaults
+prepareTable :: HasTable a
+             => Sql -> Maybe a -> IO (NamedTable a)
+prepareTable sql defaultRecord = do
+    sqlExecute sql $ tableCreate table'
+    mapM_ (sqlExecute sql) $ tableIndexes table'
+    tableMakeDefaults sql defaultRecord table'
+  where
+    table' = table
+
+makeSqrollCacheFor :: HasTable a => Sql -> Maybe a -> IO (SqrollCache a)
+makeSqrollCacheFor sql defaultRecord = do
+    table'     <- prepareTable sql defaultRecord
+    appendStmt <- sqlPrepare sql $ tableInsert table'
+    let poker = tablePoke table' appendStmt
+
+    -- This should be reasonably fast
+    let append x = poker x >> sqlStep appendStmt >> sqlReset appendStmt
+
+    return SqrollCache
+        { sqrollCacheAppend   = append
+        , sqrollCacheFinalize = sqlFinalize appendStmt
+        }
+
 data Sqroll = Sqroll
     { sqrollSql        :: Sql
     , sqrollLock       :: MVar ()
+    , sqrollCache      :: IORef (HashMap String (SqrollCache ()))
     , sqrollFinalizers :: IORef [IO ()]
     }
 
@@ -68,13 +103,30 @@ sqrollOpen :: FilePath -> IO Sqroll
 sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
-sqrollOpenWith filePath flags =
-    Sqroll <$> sqlOpen filePath flags <*> newMVar () <*> newIORef []
+sqrollOpenWith filePath flags = Sqroll
+    <$> sqlOpen filePath flags <*> newMVar ()
+    <*> newIORef HM.empty <*> newIORef []
 
 sqrollClose :: Sqroll -> IO ()
 sqrollClose sqroll = do
     sequence_ =<< readIORef (sqrollFinalizers sqroll)
+    sequence_ . map sqrollCacheFinalize . HM.elems =<<
+        readIORef (sqrollCache sqroll)
     sqlClose $ sqrollSql sqroll
+
+sqrollGetCache :: forall a. HasTable a => Sqroll -> IO (SqrollCache a)
+sqrollGetCache sqroll = do
+    cache <- readIORef (sqrollCache sqroll)
+    case HM.lookup name cache of
+        Just sq -> return $ unsafeCoerce sq
+        Nothing -> do
+            sq <- makeSqrollCacheFor (sqrollSql sqroll) Nothing
+            writeIORef (sqrollCache sqroll) $
+                HM.insert name (unsafeCoerce sq) cache
+            return sq
+  where
+    table' = table :: NamedTable a
+    name   = tableName table'
 
 sqrollTransaction :: MonadIO m => Sqroll -> m a -> m a
 sqrollTransaction sqroll f = do
@@ -85,11 +137,10 @@ sqrollTransaction sqroll f = do
     liftIO $ putMVar (sqrollLock sqroll) ()
     return x
 
-sqrollAppend :: HasTable a => Sqroll -> Maybe a -> IO (a -> IO ())
-sqrollAppend sqroll defaultRecord = do
-    (append, finalizer) <- makeAppend (sqrollSql sqroll) defaultRecord
-    modifyIORef (sqrollFinalizers sqroll) (finalizer :)
-    return append
+sqrollAppend :: HasTable a => Sqroll -> a -> IO ()
+sqrollAppend sqroll x = do
+    cache <- sqrollGetCache sqroll
+    sqrollCacheAppend cache x
 
 sqrollTail :: HasTable a => Sqroll -> Maybe a -> (a -> IO ()) -> IO (IO ())
 sqrollTail sqroll defaultRecord f = do
@@ -124,29 +175,6 @@ sqrollByKey sqroll defaultRecord key = do
     sql          = sqrollSql sqroll
     error'       = error . ("Database.Sqroll.Internal.sqrollByKey: " ++)
     foreignTable = table :: NamedTable b
-
--- | Create tables and indexes (if not exist...), ensure we have the correct
--- defaults
-prepareTable :: HasTable a
-             => Sql -> Maybe a -> IO (NamedTable a)
-prepareTable sql defaultRecord = do
-    sqlExecute sql $ tableCreate table'
-    mapM_ (sqlExecute sql) $ tableIndexes table'
-    tableMakeDefaults sql defaultRecord table'
-  where
-    table' = table
-
-makeAppend :: forall a. (HasTable a)
-           => Sql -> Maybe a -> IO (a -> IO (), IO ())
-makeAppend sql defaultRecord = do
-    table' <- prepareTable sql defaultRecord
-    stmt   <- sqlPrepare sql $ tableInsert table'
-    let poker = tablePoke table' stmt
-
-    -- This should be reasonably fast
-    let insert x = poker x >> sqlStep stmt >> sqlReset stmt
-
-    return (insert, sqlFinalize stmt)
 
 makeTail :: HasTable a => Sql -> Maybe a -> (a -> IO ()) -> IO (IO (), IO ())
 makeTail sql defaultRecord f = do

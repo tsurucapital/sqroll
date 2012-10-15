@@ -36,8 +36,7 @@ testModifiedTypes :: Assertion
 testModifiedTypes = do
     -- Insert a user type
     (tmpPath, sqroll) <- sqrollOpenTmp
-    append            <- sqrollAppend sqroll Nothing
-    append $ User "John" "Doe" 32 "kittens"
+    sqrollAppend sqroll $ User "John" "Doe" 32 "kittens"
     rowid <- sqlLastInsertRowId (sqrollSql sqroll)
     sqrollClose sqroll
 
@@ -73,14 +72,11 @@ testTableRefers = do
 
 testSqrollByKey :: Assertion
 testSqrollByKey = withTmpScroll $ \sqroll -> do
-    append  <- sqrollAppend sqroll Nothing
-    append' <- sqrollAppend sqroll Nothing
-
-    append $ Dog (Kitten (Just "Quack"))
+    sqrollAppend sqroll $ Dog (Kitten (Just "Quack"))
     key <- SqlKey <$> sqlLastInsertRowId (sqrollSql sqroll)
 
-    append' $ DogOwner "Jasper" key
-    append' $ DogOwner "Marit" (SqlKey $ unSqlKey key + 1)
+    sqrollAppend sqroll $ DogOwner "Jasper" key
+    sqrollAppend sqroll  $ DogOwner "Marit" (SqlKey $ unSqlKey key + 1)
 
     owners <- sqrollByKey sqroll Nothing key
     [DogOwner "Jasper" key] @=? owners
@@ -108,8 +104,7 @@ sqrollTailIORef sqroll = do
 
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
 testAppendTail items = withTmpScroll $ \sqroll -> do
-    tail'  <- sqrollTailIORef sqroll
-    append <- sqrollAppend sqroll Nothing
-    mapM_ append items
+    tail' <- sqrollTailIORef sqroll
+    mapM_ (sqrollAppend sqroll) items
     items' <- tail'
     items @=? items'
