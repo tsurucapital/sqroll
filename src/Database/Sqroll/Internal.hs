@@ -150,9 +150,9 @@ makeAppend sql defaultRecord = do
 
 makeTail :: HasTable a => Sql -> Maybe a -> (a -> IO ()) -> IO (IO (), IO ())
 makeTail sql defaultRecord f = do
-    ref    <- newIORef (-1)
+    ref    <- newIORef 0
     table' <- prepareTable sql defaultRecord
-    stmt   <- sqlPrepare sql $ tableSelect table' ++ " WHERE rowid > ?"
+    stmt   <- sqlPrepare sql $ tableSelect table' ++ " WHERE rowid >= ?"
     let peeker = tablePeek table' stmt
 
     let consume rowid = do
@@ -170,7 +170,7 @@ makeTail sql defaultRecord f = do
             rowid <- readIORef ref
             sqlBindInt64 stmt 1 rowid
             rowid' <- consume rowid
-            writeIORef ref rowid'
+            writeIORef ref (rowid' + 1)
             sqlReset stmt
 
     return (tail', sqlFinalize stmt)
