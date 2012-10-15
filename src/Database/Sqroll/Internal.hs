@@ -17,6 +17,7 @@ module Database.Sqroll.Internal
     , sqrollAppend
     , sqrollTail
     , sqrollSelect
+    , sqrollByKey
     ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -101,6 +102,28 @@ sqrollSelect sqroll defaultRecord = do
     (select, finalizer) <- makeSelect (sqrollSql sqroll) defaultRecord
     modifyIORef (sqrollFinalizers sqroll) (finalizer :)
     return select
+
+sqrollByKey :: forall a b. (HasTable a, HasTable b)
+            => Sqroll -> Maybe a -> SqlKey b -> IO [a]
+sqrollByKey sqroll defaultRecord key = do
+    table' <- prepareTable sql defaultRecord
+    let columns = tableRefers foreignTable table'
+
+    case columns of
+        [] -> error' $ "Table " ++ tableName table' ++
+            " does not refer to Table " ++ tableName foreignTable
+        (c : _) -> do
+            stmt <- sqlPrepare sql $
+                tableSelect table' ++ " WHERE " ++ c ++ " = ?"
+            let peeker = tablePeek table' stmt
+            sqlBindInt64 stmt 1 (unSqlKey key)
+            xs <- sqlStepAll stmt peeker
+            sqlFinalize stmt 
+            return xs
+  where
+    sql          = sqrollSql sqroll
+    error'       = error . ("Database.Sqroll.Internal.sqrollByKey: " ++)
+    foreignTable = table :: NamedTable b
 
 -- | Create tables and indexes (if not exist...), ensure we have the correct
 -- defaults

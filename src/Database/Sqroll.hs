@@ -14,6 +14,7 @@ module Database.Sqroll
     , sqrollAppend
     , sqrollTail
     , sqrollSelect
+    , sqrollByKey
     ) where
 
 import Database.Sqroll.Internal

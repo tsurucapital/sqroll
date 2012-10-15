@@ -26,6 +26,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testAliasTable"      testAliasTable
     , testCase "testTableIndexes"    testTableIndexes
     , testCase "testTableRefers"     testTableRefers
+    , testCase "testSqrollByKey"     testSqrollByKey
     ]
 
 testAppendTailUsers :: Assertion
@@ -69,6 +70,20 @@ testTableRefers = do
     []      @=? tableRefers (table :: NamedTable Kitten) ownerTable
   where
     ownerTable = table :: NamedTable DogOwner
+
+testSqrollByKey :: Assertion
+testSqrollByKey = withTmpScroll $ \sqroll -> do
+    append  <- sqrollAppend sqroll Nothing
+    append' <- sqrollAppend sqroll Nothing
+
+    append $ Dog (Kitten (Just "Quack"))
+    key <- SqlKey <$> sqlLastInsertRowId (sqrollSql sqroll)
+
+    append' $ DogOwner "Jasper" key
+    append' $ DogOwner "Marit" (SqlKey $ unSqlKey key + 1)
+
+    owners <- sqrollByKey sqroll Nothing key
+    [DogOwner "Jasper" key] @=? owners
 
 withTmpScroll :: (Sqroll -> IO a) -> IO a
 withTmpScroll f = do
