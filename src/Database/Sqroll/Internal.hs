@@ -64,6 +64,7 @@ instance forall a. HasTable a => Field (SqlKey a) where
 
 data SqrollCache a = SqrollCache
     { sqrollCacheAppend   :: a -> IO ()
+    , sqrollCacheTail     :: SqlKey a -> IO ([a], SqlKey a)
     , sqrollCacheFinalize :: IO ()
     }
 
@@ -82,14 +83,27 @@ makeSqrollCacheFor :: HasTable a => Sql -> Maybe a -> IO (SqrollCache a)
 makeSqrollCacheFor sql defaultRecord = do
     table'     <- prepareTable sql defaultRecord
     appendStmt <- sqlPrepare sql $ tableInsert table'
-    let poker = tablePoke table' appendStmt
+    tailStmt   <- sqlPrepare sql $
+        tableSelect table' ++ " WHERE rowid >= ? ORDER BY rowid"
+    let poker  = tablePoke table' appendStmt
+        peeker = tablePeek table' tailStmt
 
-    -- This should be reasonably fast
+    -- These should be reasonably fast
     let append x = poker x >> sqlStep appendStmt >> sqlReset appendStmt
+
+        tail' (SqlKey rowid) = do
+            sqlBindInt64 tailStmt 1 rowid
+            xs     <- sqlStepAll tailStmt peeker
+            rowid' <- sqlLastSelectRowId tailStmt
+            sqlReset tailStmt
+            return (xs, SqlKey (rowid' + 1))
 
     return SqrollCache
         { sqrollCacheAppend   = append
-        , sqrollCacheFinalize = sqlFinalize appendStmt
+        , sqrollCacheTail     = tail'
+        , sqrollCacheFinalize = do
+            sqlFinalize appendStmt
+            sqlFinalize tailStmt
         }
 
 data Sqroll = Sqroll
@@ -142,11 +156,10 @@ sqrollAppend sqroll x = do
     cache <- sqrollGetCache sqroll
     sqrollCacheAppend cache x
 
-sqrollTail :: HasTable a => Sqroll -> Maybe a -> (a -> IO ()) -> IO (IO ())
-sqrollTail sqroll defaultRecord f = do
-    (tail', finalizer) <- makeTail (sqrollSql sqroll) defaultRecord f
-    modifyIORef (sqrollFinalizers sqroll) (finalizer :)
-    return tail'
+sqrollTail :: HasTable a => Sqroll -> SqlKey a -> IO ([a], SqlKey a)
+sqrollTail sqroll key = do
+    cache <- sqrollGetCache sqroll
+    sqrollCacheTail cache key
 
 sqrollSelect :: HasTable a => Sqroll -> Maybe a -> IO (SqlKey a -> IO a)
 sqrollSelect sqroll defaultRecord = do
@@ -175,33 +188,6 @@ sqrollByKey sqroll defaultRecord key = do
     sql          = sqrollSql sqroll
     error'       = error . ("Database.Sqroll.Internal.sqrollByKey: " ++)
     foreignTable = table :: NamedTable b
-
-makeTail :: HasTable a => Sql -> Maybe a -> (a -> IO ()) -> IO (IO (), IO ())
-makeTail sql defaultRecord f = do
-    ref    <- newIORef 0
-    table' <- prepareTable sql defaultRecord
-    stmt   <- sqlPrepare sql $ tableSelect table' ++ " WHERE rowid >= ?"
-    let peeker = tablePeek table' stmt
-
-    let consume rowid = do
-            moreData <- sqlStep stmt
-            if moreData
-                then do
-                    x      <- peeker
-                    rowid' <- sqlLastSelectRowid stmt
-                    f x
-                    consume rowid'
-                else
-                    return rowid
-    
-        tail' = do
-            rowid <- readIORef ref
-            sqlBindInt64 stmt 1 rowid
-            rowid' <- consume rowid
-            writeIORef ref (rowid' + 1)
-            sqlReset stmt
-
-    return (tail', sqlFinalize stmt)
 
 makeSelect :: HasTable a => Sql -> Maybe a -> IO (SqlKey a -> IO a, IO ())
 makeSelect sql defaultRecord = do

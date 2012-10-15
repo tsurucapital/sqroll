@@ -5,7 +5,6 @@ module Database.Sqroll.Tests
 
 import Control.Applicative ((<$>))
 import Data.ByteString.Char8 ()
-import Data.IORef (modifyIORef, newIORef, readIORef)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
@@ -96,15 +95,8 @@ sqrollOpenTmp = do
     sqroll <- sqrollOpen tmpPath
     return (tmpPath, sqroll)
 
-sqrollTailIORef :: HasTable a => Sqroll -> IO (IO [a])
-sqrollTailIORef sqroll = do
-    ref    <- newIORef []
-    tail'  <- sqrollTail sqroll Nothing (\u -> modifyIORef ref (u :))
-    return $ tail' >> reverse <$> readIORef ref
-
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
 testAppendTail items = withTmpScroll $ \sqroll -> do
-    tail' <- sqrollTailIORef sqroll
     mapM_ (sqrollAppend sqroll) items
-    items' <- tail'
+    (items', _) <- sqrollTail sqroll (SqlKey 0)
     items @=? items'

@@ -18,7 +18,7 @@ trades = [TradeLog i (fromIntegral i * 1000) (i + 1000) | i <- [1..]]
 main :: IO ()
 main = do
     sqroll <- sqrollOpen "live.db"
-    insert <- sqrollAppend sqroll Nothing
+    -- insert <- sqrollAppend sqroll Nothing
     sequence_ . replicate 50 $ sqrollTransaction sqroll $
-        mapM_ insert $ take 10000 trades
+        mapM_ (sqrollAppend sqroll) $ take 10000 trades
     sqrollClose sqroll
