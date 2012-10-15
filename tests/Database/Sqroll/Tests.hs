@@ -25,6 +25,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testMaybeField"      testMaybeField
     , testCase "testAliasTable"      testAliasTable
     , testCase "testTableIndexes"    testTableIndexes
+    , testCase "testTableRefers"     testTableRefers
     ]
 
 testAppendTailUsers :: Assertion
@@ -61,6 +62,13 @@ testTableIndexes :: Assertion
 testTableIndexes =
     ["CREATE INDEX IF NOT EXISTS index_dog_owner_dog ON dog_owner (dog)"] @=?
     tableIndexes (table :: NamedTable DogOwner)
+
+testTableRefers :: Assertion
+testTableRefers = do
+    ["dog"] @=? tableRefers (table :: NamedTable Dog)    ownerTable
+    []      @=? tableRefers (table :: NamedTable Kitten) ownerTable
+  where
+    ownerTable = table :: NamedTable DogOwner
 
 withTmpScroll :: (Sqroll -> IO a) -> IO a
 withTmpScroll f = do

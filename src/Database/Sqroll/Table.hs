@@ -20,6 +20,7 @@ module Database.Sqroll.Table
     , tableSelect
     , tablePoke
     , tablePeek
+    , tableRefers
     , tableMakeDefaults
     ) where
 
@@ -146,6 +147,15 @@ tablePeek (NamedTable _ table) stmt = do
     go (Primitive _) !n = do
         x <- fieldPeek stmt n
         return (x, n + 1)
+
+-- | Get the names of the columns with which the second table refers to the
+-- first table. In principle, there should be only one.
+tableRefers :: forall t u. NamedTable u -> NamedTable t -> [String]
+tableRefers (NamedTable name _) = tableFoldMap go
+  where
+    go :: forall a. Field a => FieldInfo t a -> [String]
+    go fi =
+        [fieldName fi | name' <- fieldRefers (undefined :: a), name == name']
 
 -- | Check if columns are missing in the database and ensure the defaults are
 -- used in those cases
