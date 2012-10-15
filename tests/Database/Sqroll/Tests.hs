@@ -40,9 +40,9 @@ testModifiedTypes = do
     sqrollClose sqroll
 
     -- Read a modified user type
-    -- TODO: set default to (Just ModifiedTypes.defaultUser)
     sqroll' <- sqrollOpen tmpPath
-    user    <- sqrollSelect sqroll' (SqlKey rowid)
+    sqrollSetDefault sqroll' (Just ModifiedTypes.defaultUser)
+    user <- sqrollSelect sqroll' (SqlKey rowid)
     sqrollClose sqroll'
 
     -- Check that they are equal, defaults worked, everyone is happy, rainbows,

@@ -19,6 +19,7 @@ module Database.Sqroll.Internal
     , sqrollTail
     , sqrollSelect
     , sqrollByKey
+    , sqrollSetDefault
     ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -199,3 +200,19 @@ sqrollByKey sqroll defaultRecord key = do
     sql          = sqrollSql sqroll
     error'       = error . ("Database.Sqroll.Internal.sqrollByKey: " ++)
     foreignTable = table :: NamedTable b
+
+sqrollSetDefault :: forall a. HasTable a => Sqroll -> Maybe a -> IO ()
+sqrollSetDefault sqroll defaultRecord = do
+    -- Run finalizers for previous default
+    cache <- readIORef (sqrollCache sqroll)
+    case HM.lookup name cache of
+        Just sq -> sqrollCacheFinalize sq
+        _       -> return ()
+
+    -- Install new default
+    sq <- makeSqrollCacheFor (sqrollSql sqroll) defaultRecord
+    writeIORef (sqrollCache sqroll) $
+        HM.insert name (unsafeCoerce sq) cache
+  where
+    table' = table :: NamedTable a
+    name   = tableName table'

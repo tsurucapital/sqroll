@@ -15,6 +15,7 @@ module Database.Sqroll
     , sqrollTail
     , sqrollSelect
     , sqrollByKey
+    , sqrollSetDefault
     ) where
 
 import Database.Sqroll.Internal
