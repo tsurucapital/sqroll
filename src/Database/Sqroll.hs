@@ -4,7 +4,7 @@ module Database.Sqroll
     , HasTable (..)
     , aliasTable
 
-    , SqlKey (..)
+    , Key (..)
 
     , Sqroll (sqrollSql)
     , sqrollOpen

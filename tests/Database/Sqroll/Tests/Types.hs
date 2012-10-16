@@ -14,7 +14,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import GHC.Generics (Generic)
 
-import Database.Sqroll (HasTable (..), SqlKey, aliasTable)
+import Database.Sqroll (HasTable (..), Key, aliasTable)
 
 data User = User
     { userFirstName :: String
@@ -48,7 +48,7 @@ instance HasTable Dog where
 
 data DogOwner = DogOwner
     { dogOwnerName :: String
-    , dogOwnerDog  :: SqlKey Dog
+    , dogOwnerDog  :: Key Dog
     } deriving (Eq, Generic, Show)
 
 instance HasTable DogOwner

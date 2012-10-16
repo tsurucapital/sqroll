@@ -8,14 +8,14 @@ import Data.ByteString.Char8 ()
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
-import System.Directory (getTemporaryDirectory, removeFile)
-import System.FilePath ((</>))
+import System.Directory (removeFile)
 
 import Database.Sqroll
 import qualified Database.Sqroll.Tests.ModifiedTypes as ModifiedTypes
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
 import Database.Sqroll.Tests.Types
+import Database.Sqroll.Tests.Util
 
 tests :: Test
 tests = testGroup "Database.Sqroll.Tests"
@@ -42,7 +42,7 @@ testModifiedTypes = do
     -- Read a modified user type
     sqroll' <- sqrollOpen tmpPath
     sqrollSetDefault sqroll' (Just ModifiedTypes.defaultUser)
-    user <- sqrollSelect sqroll' (SqlKey rowid)
+    user <- sqrollSelect sqroll' (Key rowid)
     sqrollClose sqroll'
 
     -- Check that they are equal, defaults worked, everyone is happy, rainbows,
@@ -72,31 +72,16 @@ testTableRefers = do
 testSqrollByKey :: Assertion
 testSqrollByKey = withTmpScroll $ \sqroll -> do
     sqrollAppend sqroll $ Dog (Kitten (Just "Quack"))
-    key <- SqlKey <$> sqlLastInsertRowId (sqrollSql sqroll)
+    key <- Key <$> sqlLastInsertRowId (sqrollSql sqroll)
 
     sqrollAppend sqroll $ DogOwner "Jasper" key
-    sqrollAppend sqroll $ DogOwner "Marit" (SqlKey $ unSqlKey key + 1)
+    sqrollAppend sqroll $ DogOwner "Marit" (Key $ unKey key + 1)
 
     owners <- sqrollByKey sqroll Nothing key
     [DogOwner "Jasper" key] @=? owners
 
-withTmpScroll :: (Sqroll -> IO a) -> IO a
-withTmpScroll f = do
-    (tmpPath, sqroll) <- sqrollOpenTmp
-    x                 <- f sqroll
-    sqrollClose sqroll
-    removeFile tmpPath
-    return x
-
-sqrollOpenTmp :: IO (FilePath, Sqroll)
-sqrollOpenTmp = do
-    tmpDir <- getTemporaryDirectory
-    let tmpPath = tmpDir </> "sqroll-test.db"
-    sqroll <- sqrollOpen tmpPath
-    return (tmpPath, sqroll)
-
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
 testAppendTail items = withTmpScroll $ \sqroll -> do
     mapM_ (sqrollAppend sqroll) items
-    (items', _) <- sqrollTail sqroll (SqlKey 0)
+    (items', _) <- sqrollTail sqroll (Key 0)
     items @=? items'

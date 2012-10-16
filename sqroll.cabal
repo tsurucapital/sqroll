@@ -18,6 +18,7 @@ Library
   Exposed-modules:     
     Database.Sqroll
     Database.Sqroll.Internal
+    Database.Sqroll.Pure
     Database.Sqroll.Sqlite3
     Database.Sqroll.Table
     Database.Sqroll.Table.Field
@@ -46,6 +47,7 @@ Test-suite sqroll-tests
   Type:           exitcode-stdio-1.0
 
   Other-modules:
+    Database.Sqroll.Pure.Tests
     Database.Sqroll.Sqlite3.Tests
     Database.Sqroll.Table.Naming.Tests
     Database.Sqroll.Tests

@@ -8,7 +8,7 @@ module Database.Sqroll.Internal
     , HasTable (..)
     , aliasTable
 
-    , SqlKey (..)
+    , Key (..)
 
     , Sqroll (sqrollSql)
     , sqrollOpen
@@ -49,24 +49,24 @@ aliasTable name mk unmk =
     in NamedTable name $ mapTable mk unmk table'
 
 -- Maybe rename to SqrollKey?
-newtype SqlKey a = SqlKey {unSqlKey :: SqlRowId}
+newtype Key a = Key {unKey :: SqlRowId}
     deriving (Eq, Show)
 
-instance forall a. HasTable a => Field (SqlKey a) where
+instance forall a. HasTable a => Field (Key a) where
     fieldType    = const SqlInteger
     fieldRefers  = const [tableName (table :: NamedTable a)]
-    fieldDefault = SqlKey (-1)
+    fieldDefault = Key (-1)
 
-    fieldPoke stmt n (SqlKey x) = sqlBindInt64 stmt n x
+    fieldPoke stmt n (Key x) = sqlBindInt64 stmt n x
     {-# INLINE fieldPoke #-}
 
-    fieldPeek stmt = fmap SqlKey . sqlColumnInt64 stmt
+    fieldPeek stmt = fmap Key . sqlColumnInt64 stmt
     {-# INLINE fieldPeek #-}
 
 data SqrollCache a = SqrollCache
     { sqrollCacheAppend   :: a -> IO ()
-    , sqrollCacheTail     :: SqlKey a -> IO ([a], SqlKey a)
-    , sqrollCacheSelect   :: SqlKey a -> IO a
+    , sqrollCacheTail     :: Key a -> IO ([a], Key a)
+    , sqrollCacheSelect   :: Key a -> IO a
     , sqrollCacheFinalize :: IO ()
     }
 
@@ -93,14 +93,14 @@ makeSqrollCacheFor sql defaultRecord = do
     -- These should be reasonably fast
     let append x = poker x >> sqlStep appendStmt >> sqlReset appendStmt
 
-        tail' (SqlKey rowid) = do
+        tail' (Key rowid) = do
             sqlBindInt64 tailStmt 1 rowid
             xs     <- sqlStepAll tailStmt peeker
             rowid' <- sqlLastSelectRowId tailStmt
             sqlReset tailStmt
-            return (xs, SqlKey (rowid' + 1))
+            return (xs, Key (rowid' + 1))
 
-        select (SqlKey rowid) = do
+        select (Key rowid) = do
             sqlBindInt64 tailStmt 1 rowid
             sqlStep_ tailStmt
             x <- peeker
@@ -167,20 +167,20 @@ sqrollAppend sqroll x = do
     sqrollCacheAppend cache x
 {-# INLINE sqrollAppend #-}
 
-sqrollTail :: HasTable a => Sqroll -> SqlKey a -> IO ([a], SqlKey a)
+sqrollTail :: HasTable a => Sqroll -> Key a -> IO ([a], Key a)
 sqrollTail sqroll key = do
     cache <- sqrollGetCache sqroll
     sqrollCacheTail cache key
 {-# INLINE sqrollTail #-}
 
-sqrollSelect :: HasTable a => Sqroll -> SqlKey a -> IO a
+sqrollSelect :: HasTable a => Sqroll -> Key a -> IO a
 sqrollSelect sqroll key = do
     cache <- sqrollGetCache sqroll
     sqrollCacheSelect cache key
 {-# INLINE sqrollSelect #-}
 
 sqrollByKey :: forall a b. (HasTable a, HasTable b)
-            => Sqroll -> Maybe a -> SqlKey b -> IO [a]
+            => Sqroll -> Maybe a -> Key b -> IO [a]
 sqrollByKey sqroll defaultRecord key = do
     table' <- prepareTable sql defaultRecord
     let columns = tableRefers foreignTable table'
@@ -192,7 +192,7 @@ sqrollByKey sqroll defaultRecord key = do
             stmt <- sqlPrepare sql $
                 tableSelect table' ++ " WHERE " ++ c ++ " = ?"
             let peeker = tablePeek table' stmt
-            sqlBindInt64 stmt 1 (unSqlKey key)
+            sqlBindInt64 stmt 1 (unKey key)
             xs <- sqlStepAll stmt peeker
             sqlFinalize stmt 
             return xs
