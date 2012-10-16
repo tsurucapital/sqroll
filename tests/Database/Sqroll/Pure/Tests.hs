@@ -33,8 +33,8 @@ instance HasTable Instrument
 type InstrumentCache = [(Instrument, Key Instrument)]
 
 writeInstrument :: Instrument
-                -> (Key Instrument -> [Log InstrumentCache a])
-                -> Log InstrumentCache a
+                -> (Key Instrument -> [Log InstrumentCache])
+                -> Log InstrumentCache
 writeInstrument instr f =
     LogKeyCache instr (lookup instr) (\k c -> (instr, k) : c) f
 

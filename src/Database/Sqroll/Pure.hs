@@ -11,13 +11,13 @@ import Database.Sqroll
 import Database.Sqroll.Sqlite3
 
 -- | Describes logging in a pure way
-data Log c a where
+data Log c where
     -- | Simple insertion
-    Log :: HasTable a => a -> Log c a
+    Log :: HasTable a => a -> Log c
 
     -- | Insertion depending on a foreign key
     LogKey
-        :: HasTable b => b -> (Key b -> [Log c a]) -> Log c a
+        :: HasTable b => b -> (Key b -> [Log c]) -> Log c
 
     -- | Insertion depending on cached foreign keys
     LogKeyCache
@@ -25,10 +25,10 @@ data Log c a where
         => b
         -> (c -> Maybe (Key b))
         -> (Key b -> c -> c)
-        -> (Key b -> [Log c a]) -> Log c a
+        -> (Key b -> [Log c]) -> Log c
 
 -- | Execute this in a transaction
-runLog :: Sqroll -> c -> [Log c a] -> IO c
+runLog :: Sqroll -> c -> [Log c] -> IO c
 runLog sqroll = foldM go
   where
     go c (Log x) = sqrollAppend sqroll x >> return c
