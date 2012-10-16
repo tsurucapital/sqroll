@@ -11,8 +11,14 @@ import Database.Sqroll.Table.Naming
 
 tests :: Test
 tests = testGroup "Database.Sqroll.Table.Naming.Tests"
-    [ testCase "testUnCamelCase" testUnCamelCase
+    [ testCase "testMakeFieldName" testMakeFieldName
+    , testCase "testUnCamelCase"   testUnCamelCase
     ]
+
+testMakeFieldName :: Assertion
+testMakeFieldName = do
+    "first_name" @=? makeFieldName "Person" "_personFirstName"
+    "first_name" @=? makeFieldName "Person" "personFirstName"
 
 testUnCamelCase :: Assertion
 testUnCamelCase = do

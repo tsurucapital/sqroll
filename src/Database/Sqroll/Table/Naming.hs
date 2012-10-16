@@ -7,10 +7,16 @@ import Data.Char (isUpper, toLower)
 import Data.List (intercalate, isPrefixOf)
 
 makeFieldName :: String -> String -> String
-makeFieldName dtn fn = unCamelCase $
-    if map toLower dtn `isPrefixOf` map toLower fn
-        then drop (length dtn) fn
-        else fn
+makeFieldName dtn = unCamelCase . dropLowerPrefix dtn . dropLeadingUnderscore
+
+dropLowerPrefix :: String -> String -> String
+dropLowerPrefix prefix str
+    | map toLower prefix `isPrefixOf` map toLower str = drop (length prefix) str
+    | otherwise                                       = str
+
+dropLeadingUnderscore :: String -> String
+dropLeadingUnderscore ('_' : xs) = xs
+dropLeadingUnderscore xs         = xs
 
 unCamelCase :: String -> String
 unCamelCase = intercalate "_" . map (map toLower) . caseGroup
