@@ -14,7 +14,7 @@ import Database.Sqroll.Tests.Util
 
 tests :: Test
 tests = testGroup "Database.Sqroll.Tests"
-    [ testCase "testRunWrite" testRunWrite
+    [ testCase "testRunLog" testRunLog
     ]
 
 data Generation = Generation
@@ -33,10 +33,10 @@ instance HasTable Instrument
 type InstrumentCache = [(Instrument, Key Instrument)]
 
 writeInstrument :: Instrument
-                -> (Key Instrument -> [Write InstrumentCache a])
-                -> Write InstrumentCache a
+                -> (Key Instrument -> [Log InstrumentCache a])
+                -> Log InstrumentCache a
 writeInstrument instr f =
-    WriteKeyCache instr (lookup instr) (\k c -> (instr, k) : c) f
+    LogKeyCache instr (lookup instr) (\k c -> (instr, k) : c) f
 
 data Bid = Bid
     { _bidGeneration :: Key Generation
@@ -46,22 +46,22 @@ data Bid = Bid
 
 instance HasTable Bid
 
-testRunWrite :: Assertion
-testRunWrite = withTmpScroll $ \sqroll -> do
-    c <- runWrite sqroll []
-        [ WriteKey (Generation 1 "testgen") $ \genKey ->
+testRunLog :: Assertion
+testRunLog = withTmpScroll $ \sqroll -> do
+    c <- runLog sqroll []
+        [ LogKey (Generation 1 "testgen") $ \genKey ->
             [ writeInstrument (Instrument "cookies") $ \instrKey ->
-                [ Write (Bid genKey instrKey 10)
-                , Write (Bid genKey instrKey 12)
+                [ Log (Bid genKey instrKey 10)
+                , Log (Bid genKey instrKey 12)
                 ]
             ]
         ]
 
-    c' <- runWrite sqroll c
-        [ WriteKey (Generation 4 "alexgen") $ \genKey ->
+    c' <- runLog sqroll c
+        [ LogKey (Generation 4 "alexgen") $ \genKey ->
             [ writeInstrument (Instrument "cookies") $ \instrKey ->
-                [ Write (Bid genKey instrKey 20)
-                , Write (Bid genKey instrKey 22)
+                [ Log (Bid genKey instrKey 20)
+                , Log (Bid genKey instrKey 22)
                 ]
             ]
         ]
