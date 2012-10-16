@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# OPTIONS_GHC -fno-warn-unused-matches #-}
 module Database.Sqroll.Pure.Tests
     ( tests
     ) where
@@ -19,14 +18,14 @@ tests = testGroup "Database.Sqroll.Tests"
     ]
 
 data Generation = Generation
-    { generationNo     :: Int
-    , generationOrigin :: String
+    { _generationNo     :: Int
+    , _generationOrigin :: String
     } deriving (Eq, Generic, Show)
 
 instance HasTable Generation
 
 newtype Instrument = Instrument
-    { instrumentDescription :: String
+    { _instrumentDescription :: String
     } deriving (Eq, Generic, Show)
 
 instance HasTable Instrument
@@ -40,9 +39,9 @@ writeInstrument instr f =
     WriteKeyCache instr (lookup instr) (\k c -> (instr, k) : c) f
 
 data Bid = Bid
-    { bidGeneration :: Key Generation
-    , bidInstrument :: Key Instrument
-    , bidPrice      :: Int
+    { _bidGeneration :: Key Generation
+    , _bidInstrument :: Key Instrument
+    , _bidPrice      :: Int
     } deriving (Eq, Generic, Show)
 
 instance HasTable Bid
