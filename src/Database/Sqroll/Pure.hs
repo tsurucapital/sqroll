@@ -5,7 +5,7 @@ module Database.Sqroll.Pure
     ) where
 
 import Control.Applicative ((<$>))
-import Control.Monad (foldM)
+import Data.IORef (IORef, readIORef, modifyIORef)
 
 import Database.Sqroll
 import Database.Sqroll.Sqlite3
@@ -28,19 +28,22 @@ data Log c where
         -> (Key b -> [Log c]) -> Log c
 
 -- | Execute this in a transaction
-runLog :: Sqroll -> c -> [Log c] -> IO c
-runLog sqroll = foldM go
+runLog :: Sqroll -> IORef c -> [Log c] -> IO ()
+runLog sqroll cache = mapM_ go
   where
-    go c (Log x) = sqrollAppend sqroll x >> return c
+    go (Log x) = sqrollAppend sqroll x
 
-    go c (LogKey x f) = do
+    go (LogKey x f) = do
         sqrollAppend sqroll x
         key <- Key <$> sqlLastInsertRowId (sqrollSql sqroll)
-        foldM go c (f key)
+        mapM_ go (f key)
 
-    go c (LogKeyCache x look insert f) = case look c of
-        Just key -> foldM go c (f key)
-        Nothing  -> do
-            sqrollAppend sqroll x
-            key <- Key <$> sqlLastInsertRowId (sqrollSql sqroll)
-            foldM go (insert key c) (f key)
+    go (LogKeyCache x look insert f) = do
+        c <- readIORef cache
+        case look c of
+            Just key -> mapM_ go (f key)
+            Nothing  -> do
+                sqrollAppend sqroll x
+                key <- Key <$> sqlLastInsertRowId (sqrollSql sqroll)
+                modifyIORef cache (insert key)
+                mapM_ go (f key)

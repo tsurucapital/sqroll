@@ -3,6 +3,7 @@ module Database.Sqroll.Pure.Tests
     ( tests
     ) where
 
+import Data.IORef (newIORef, readIORef)
 import GHC.Generics (Generic)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
@@ -48,7 +49,9 @@ instance HasTable Bid
 
 testRunLog :: Assertion
 testRunLog = withTmpScroll $ \sqroll -> do
-    c <- runLog sqroll []
+    cache <- newIORef []
+
+    runLog sqroll cache
         [ LogKey (Generation 1 "testgen") $ \genKey ->
             [ writeInstrument (Instrument "cookies") $ \instrKey ->
                 [ Log (Bid genKey instrKey 10)
@@ -57,7 +60,7 @@ testRunLog = withTmpScroll $ \sqroll -> do
             ]
         ]
 
-    c' <- runLog sqroll c
+    runLog sqroll cache
         [ LogKey (Generation 4 "alexgen") $ \genKey ->
             [ writeInstrument (Instrument "cookies") $ \instrKey ->
                 [ Log (Bid genKey instrKey 20)
@@ -67,7 +70,8 @@ testRunLog = withTmpScroll $ \sqroll -> do
         ]
 
     -- Check that there's only one item in the cache
-    1 @=? length c'
+    cache' <- readIORef cache
+    1 @=? length cache'
 
     (generations, _) <- sqrollTail sqroll (Key 0)
     generations @?=
