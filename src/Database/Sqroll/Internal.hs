@@ -17,6 +17,7 @@ module Database.Sqroll.Internal
     , sqrollTransaction
     , sqrollAppend
     , sqrollTail
+    , sqrollTailList
     , sqrollSelect
     , sqrollByKey
     , sqrollSetDefault
@@ -27,7 +28,7 @@ import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
 import GHC.Generics (Generic, Rep, from, to)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -65,7 +66,7 @@ instance forall a. HasTable a => Field (Key a) where
 
 data SqrollCache a = SqrollCache
     { sqrollCacheAppend   :: a -> IO ()
-    , sqrollCacheTail     :: Key a -> IO ([a], Key a)
+    , sqrollCacheTail     :: Key a -> (a -> IO ()) -> IO (Key a)
     , sqrollCacheSelect   :: Key a -> IO a
     , sqrollCacheFinalize :: IO ()
     }
@@ -93,12 +94,12 @@ makeSqrollCacheFor sql defaultRecord = do
     -- These should be reasonably fast
     let append x = poker x >> sqlStep appendStmt >> sqlReset appendStmt
 
-        tail' (Key rowid) = do
+        tail' (Key rowid) f = do
             sqlBindInt64 tailStmt 1 rowid
-            xs     <- sqlStepAll tailStmt peeker
+            sqlStepAll tailStmt (peeker >>= f)
             rowid' <- sqlLastSelectRowId tailStmt
             sqlReset tailStmt
-            return (xs, Key (rowid' + 1))
+            return $ Key $ rowid' + 1
 
         select (Key rowid) = do
             sqlBindInt64 tailStmt 1 rowid
@@ -110,7 +111,7 @@ makeSqrollCacheFor sql defaultRecord = do
     return SqrollCache
         { sqrollCacheAppend   = append
         , sqrollCacheTail     = tail'
-        , sqrollCacheSelect  = select
+        , sqrollCacheSelect   = select
         , sqrollCacheFinalize = do
             sqlFinalize appendStmt
             sqlFinalize tailStmt
@@ -167,11 +168,18 @@ sqrollAppend sqroll x = do
     sqrollCacheAppend cache x
 {-# INLINE sqrollAppend #-}
 
-sqrollTail :: HasTable a => Sqroll -> Key a -> IO ([a], Key a)
-sqrollTail sqroll key = do
+sqrollTail :: HasTable a => Sqroll -> Key a -> (a -> IO ()) -> IO (Key a)
+sqrollTail sqroll key f = do
     cache <- sqrollGetCache sqroll
-    sqrollCacheTail cache key
+    sqrollCacheTail cache key f
 {-# INLINE sqrollTail #-}
+
+sqrollTailList :: HasTable a => Sqroll -> Key a -> IO ([a], Key a)
+sqrollTailList sqroll key = do
+    ref  <- newIORef []
+    key' <- sqrollTail sqroll key $ \x -> modifyIORef ref (x :)
+    xs   <- reverse <$> readIORef ref
+    return (xs, key')
 
 sqrollSelect :: HasTable a => Sqroll -> Key a -> IO a
 sqrollSelect sqroll key = do
@@ -193,8 +201,8 @@ sqrollByKey sqroll defaultRecord key = do
                 tableSelect table' ++ " WHERE " ++ c ++ " = ?"
             let peeker = tablePeek table' stmt
             sqlBindInt64 stmt 1 (unKey key)
-            xs <- sqlStepAll stmt peeker
-            sqlFinalize stmt 
+            xs <- sqlStepList stmt peeker
+            sqlFinalize stmt
             return xs
   where
     sql          = sqrollSql sqroll

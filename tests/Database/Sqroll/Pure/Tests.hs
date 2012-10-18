@@ -73,18 +73,18 @@ testRunLog = withTmpScroll $ \sqroll -> do
     cache' <- readIORef cache
     1 @=? length cache'
 
-    (generations, _) <- sqrollTail sqroll (Key 0)
+    (generations, _) <- sqrollTailList sqroll (Key 0)
     generations @?=
         [ Generation 1 "testgen"
         , Generation 4 "alexgen"
         ]
 
-    (instruments, _) <- sqrollTail sqroll (Key 0)
+    (instruments, _) <- sqrollTailList sqroll (Key 0)
     instruments @?=
         [ Instrument "cookies"
         ]
 
-    (bids, _) <- sqrollTail sqroll (Key 0)
+    (bids, _) <- sqrollTailList sqroll (Key 0)
     bids @?=
         [ Bid (Key 1) (Key 1) 10
         , Bid (Key 1) (Key 1) 12

@@ -10,7 +10,7 @@ module Database.Sqroll.Sqlite3
 
     , SqlOpenFlag (..)
     , sqlDefaultOpenFlags
-    
+
     , sqlOpen
     , sqlClose
 
@@ -18,6 +18,7 @@ module Database.Sqroll.Sqlite3
     , sqlFinalize
     , sqlStep
     , sqlStepAll
+    , sqlStepList
     , sqlStep_
     , sqlReset
     , sqlExecute
@@ -28,7 +29,7 @@ module Database.Sqroll.Sqlite3
     , sqlBindByteString
     , sqlBindLazyByteString
     , sqlBindNothing
-    
+
     , sqlColumnInt64
     , sqlColumnDouble
     , sqlColumnString
@@ -51,6 +52,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as BI
 import qualified Data.ByteString.Lazy as BL
 import Data.Int (Int64)
+import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.List (foldl')
 import Foreign.C.String
 import Foreign.C.Types
@@ -144,15 +146,21 @@ sqlStep stmt = sqlite3_step stmt >>= checkStatus
     {-# INLINE checkStatus #-}
 {-# INLINE sqlStep #-}
 
-sqlStepAll :: SqlStmt -> IO a -> IO [a]
+sqlStepAll :: SqlStmt -> IO () -> IO ()
 sqlStepAll stmt f = sqlStep stmt >>= go
   where
-    go False = return []
+    go False = return ()
     go True  = do
-        x <- f
+        f
         n <- sqlStep stmt
-        fmap (x :) (go n)
+        go n
 {-# INLINE sqlStepAll #-}
+
+sqlStepList :: SqlStmt -> IO a -> IO [a]
+sqlStepList stmt f = do
+    ref <- newIORef []
+    sqlStepAll stmt (f >>= \x -> modifyIORef ref (x :))
+    reverse <$> readIORef ref
 
 sqlStep_ :: SqlStmt -> IO ()
 sqlStep_ stmt = sqlStep stmt >> return ()
@@ -301,7 +309,7 @@ sqlLastSelectRowId stmt = sqlColumnInt64 stmt 0
 sqlTableColumns :: Sql -> String -> IO [String]
 sqlTableColumns sql tableName = do
     stmt <- sqlPrepare sql $ "PRAGMA table_info(" ++ tableName ++ ")"
-    cols <- sqlStepAll stmt $ sqlColumnString stmt 1
+    cols <- sqlStepList stmt $ sqlColumnString stmt 1
     sqlFinalize stmt
     return cols
 

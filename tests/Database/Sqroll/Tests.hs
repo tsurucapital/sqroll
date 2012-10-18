@@ -83,5 +83,5 @@ testSqrollByKey = withTmpScroll $ \sqroll -> do
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
 testAppendTail items = withTmpScroll $ \sqroll -> do
     mapM_ (sqrollAppend sqroll) items
-    (items', _) <- sqrollTail sqroll (Key 0)
+    (items', _) <- sqrollTailList sqroll (Key 0)
     items @=? items'

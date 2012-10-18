@@ -13,6 +13,7 @@ module Database.Sqroll
     , sqrollTransaction
     , sqrollAppend
     , sqrollTail
+    , sqrollTailList
     , sqrollSelect
     , sqrollByKey
     , sqrollSetDefault
