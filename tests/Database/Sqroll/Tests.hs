@@ -22,6 +22,7 @@ tests = testGroup "Database.Sqroll.Tests"
     [ testCase "testAppendTailUsers" testAppendTailUsers
     , testCase "testModifiedTypes"   testModifiedTypes
     , testCase "testMaybeField"      testMaybeField
+    , testCase "testBeamableField"   testBeamableField
     , testCase "testAliasTable"      testAliasTable
     , testCase "testTableIndexes"    testTableIndexes
     , testCase "testTableRefers"     testTableRefers
@@ -53,6 +54,9 @@ testModifiedTypes = do
 
 testMaybeField :: Assertion
 testMaybeField = testAppendTail testKittens
+
+testBeamableField :: Assertion
+testBeamableField = testAppendTail testFooBars
 
 testAliasTable :: Assertion
 testAliasTable = testAppendTail $ map Dog testKittens

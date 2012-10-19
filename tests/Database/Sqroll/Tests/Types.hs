@@ -1,10 +1,15 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Database.Sqroll.Tests.Types
     ( User (..)
     , testUsers
 
     , Kitten (..)
     , testKittens
+
+    , FooBar (..)
+    , testFooBars
 
     , Dog (..)
     , DogOwner (..)
@@ -15,6 +20,7 @@ import qualified Data.ByteString as B
 import GHC.Generics (Generic)
 
 import Database.Sqroll (HasTable (..), Key, aliasTable)
+import Database.Sqroll.Table.Field (Field)
 
 data User = User
     { userFirstName :: String
@@ -39,6 +45,18 @@ instance HasTable Kitten
 
 testKittens :: [Kitten]
 testKittens = [Kitten Nothing, Kitten (Just "Woof")]
+
+data FooBar = FooBar
+    { -- Uses the Beamable instance...
+      fooBarList :: [Either String Int]
+    } deriving (Eq, Generic, Show)
+
+instance Field [Either String Int]
+
+instance HasTable FooBar
+
+testFooBars :: [FooBar]
+testFooBars = [FooBar [Left "NANANANANANA", Right 3, Left "sup"]]
 
 newtype Dog = Dog {unDog :: Kitten}
     deriving (Eq, Generic, Show)

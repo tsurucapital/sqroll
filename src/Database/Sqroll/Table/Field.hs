@@ -6,7 +6,7 @@ module Database.Sqroll.Table.Field
     , fieldIndexed
     ) where
 
-import Data.Binary (Binary, encode, decode)
+import Data.Beamable (Beamable, decode, encode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -24,7 +24,7 @@ class Field a where
     fieldPoke    :: SqlStmt -> Int -> a -> IO ()
     fieldPeek    :: SqlStmt -> Int -> IO a
 
-    -- Defaults: use Binary
+    -- Defaults: use Beamable
     default fieldType :: a -> SqlType
     fieldType = const SqlBlob
 
@@ -34,11 +34,11 @@ class Field a where
     default fieldDefault :: Monoid a => a
     fieldDefault = mempty
 
-    default fieldPoke :: Binary a => SqlStmt -> Int -> a -> IO ()
-    fieldPoke stmt n x = sqlBindLazyByteString stmt n (encode x)
+    default fieldPoke :: Beamable a => SqlStmt -> Int -> a -> IO ()
+    fieldPoke stmt n x = sqlBindByteString stmt n (encode x)
 
-    default fieldPeek :: Binary a => SqlStmt -> Int -> IO a
-    fieldPeek stmt n = fmap decode $ sqlColumnLazyByteString stmt n
+    default fieldPeek :: Beamable a => SqlStmt -> Int -> IO a
+    fieldPeek stmt n = fmap decode $ sqlColumnByteString stmt n
 
 instance Field Int where
     fieldType    = const SqlInteger
