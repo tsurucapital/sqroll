@@ -188,8 +188,10 @@ sqrollSelect sqroll key = do
 {-# INLINE sqrollSelect #-}
 
 sqrollByKey :: forall a b. (HasTable a, HasTable b)
-            => Sqroll -> Maybe a -> Key b -> IO [a]
-sqrollByKey sqroll defaultRecord key = do
+            => Sqroll -> Maybe a -> Key b -> (a -> IO ()) -> IO ()
+sqrollByKey sqroll defaultRecord key f = do
+    -- Note: this method currently doesn't use caching of statements/peekers as
+    -- the other methods in the module do.
     table' <- prepareTable sql defaultRecord
     let columns = tableRefers foreignTable table'
 
@@ -201,9 +203,8 @@ sqrollByKey sqroll defaultRecord key = do
                 tableSelect table' ++ " WHERE " ++ c ++ " = ?"
             let peeker = tablePeek table' stmt
             sqlBindInt64 stmt 1 (unKey key)
-            xs <- sqlStepList stmt peeker
+            sqlStepAll stmt (peeker >>= f)
             sqlFinalize stmt
-            return xs
   where
     sql          = sqrollSql sqroll
     error'       = error . ("Database.Sqroll.Internal.sqrollByKey: " ++)

@@ -81,8 +81,8 @@ testSqrollByKey = withTmpScroll $ \sqroll -> do
     sqrollAppend sqroll $ DogOwner "Jasper" key
     sqrollAppend sqroll $ DogOwner "Marit" (Key $ unKey key + 1)
 
-    owners <- sqrollByKey sqroll Nothing key
-    [DogOwner "Jasper" key] @=? owners
+    sqrollByKey sqroll Nothing key $ \owner ->
+        DogOwner "Jasper" key @=? owner
 
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
 testAppendTail items = withTmpScroll $ \sqroll -> do
