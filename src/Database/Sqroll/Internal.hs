@@ -23,8 +23,9 @@ module Database.Sqroll.Internal
     , sqrollSetDefault
     ) where
 
-import Control.Applicative ((<$>), (<*>))
+import Control.Applicative (pure, (<$>), (<*>))
 import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
+import Control.Monad (unless)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
@@ -74,17 +75,19 @@ data SqrollCache a = SqrollCache
 -- | Create tables and indexes (if not exist...), ensure we have the correct
 -- defaults
 prepareTable :: HasTable a
-             => Sql -> Maybe a -> IO (NamedTable a)
-prepareTable sql defaultRecord = do
-    sqlExecute sql $ tableCreate table'
-    mapM_ (sqlExecute sql) $ tableIndexes table'
+             => Sqroll -> Maybe a -> IO (NamedTable a)
+prepareTable sqroll defaultRecord = do
+    unless (sqrollReadOnly sqroll) $ do
+        sqlExecute sql $ tableCreate table'
+        mapM_ (sqlExecute sql) $ tableIndexes table'
     tableMakeDefaults sql defaultRecord table'
   where
+    sql    = sqrollSql sqroll
     table' = table
 
-makeSqrollCacheFor :: HasTable a => Sql -> Maybe a -> IO (SqrollCache a)
-makeSqrollCacheFor sql defaultRecord = do
-    table'     <- prepareTable sql defaultRecord
+makeSqrollCacheFor :: HasTable a => Sqroll -> Maybe a -> IO (SqrollCache a)
+makeSqrollCacheFor sqroll defaultRecord = do
+    table'     <- prepareTable sqroll defaultRecord
     appendStmt <- sqlPrepare sql $ tableInsert table'
     tailStmt   <- sqlPrepare sql $
         tableSelect table' ++ " WHERE rowid >= ? ORDER BY rowid"
@@ -116,9 +119,12 @@ makeSqrollCacheFor sql defaultRecord = do
             sqlFinalize appendStmt
             sqlFinalize tailStmt
         }
+  where
+    sql = sqrollSql sqroll
 
 data Sqroll = Sqroll
     { sqrollSql        :: Sql
+    , sqrollOpenFlags  :: [SqlOpenFlag]
     , sqrollLock       :: MVar ()
     , sqrollCache      :: IORef (HashMap String (SqrollCache ()))
     , sqrollFinalizers :: IORef [IO ()]
@@ -129,7 +135,7 @@ sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
 sqrollOpenWith filePath flags = Sqroll
-    <$> sqlOpen filePath flags <*> newMVar ()
+    <$> sqlOpen filePath flags <*> pure flags <*> newMVar ()
     <*> newIORef HM.empty <*> newIORef []
 
 sqrollClose :: Sqroll -> IO ()
@@ -139,13 +145,16 @@ sqrollClose sqroll = do
         readIORef (sqrollCache sqroll)
     sqlClose $ sqrollSql sqroll
 
+sqrollReadOnly :: Sqroll -> Bool
+sqrollReadOnly = (SqlOpenReadOnly `elem`) . sqrollOpenFlags
+
 sqrollGetCache :: forall a. HasTable a => Sqroll -> IO (SqrollCache a)
 sqrollGetCache sqroll = do
     cache <- readIORef (sqrollCache sqroll)
     case HM.lookup name cache of
         Just sq -> return $ unsafeCoerce sq
         Nothing -> do
-            sq <- makeSqrollCacheFor (sqrollSql sqroll) Nothing
+            sq <- makeSqrollCacheFor sqroll Nothing
             writeIORef (sqrollCache sqroll) $
                 HM.insert name (unsafeCoerce sq) cache
             return sq
@@ -192,7 +201,7 @@ sqrollByKey :: forall a b. (HasTable a, HasTable b)
 sqrollByKey sqroll defaultRecord key f = do
     -- Note: this method currently doesn't use caching of statements/peekers as
     -- the other methods in the module do.
-    table' <- prepareTable sql defaultRecord
+    table' <- prepareTable sqroll defaultRecord
     let columns = tableRefers foreignTable table'
 
     case columns of
@@ -219,7 +228,7 @@ sqrollSetDefault sqroll defaultRecord = do
         _       -> return ()
 
     -- Install new default
-    sq <- makeSqrollCacheFor (sqrollSql sqroll) defaultRecord
+    sq <- makeSqrollCacheFor sqroll defaultRecord
     writeIORef (sqrollCache sqroll) $
         HM.insert name (unsafeCoerce sq) cache
   where
