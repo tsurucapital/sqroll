@@ -55,7 +55,7 @@ newtype Key a = Key {unKey :: SqlRowId}
     deriving (Eq, Show)
 
 instance forall a. HasTable a => Field (Key a) where
-    fieldType    = const SqlInteger
+    fieldTypes   = const [SqlInteger]
     fieldRefers  = const [tableName (table :: NamedTable a)]
     fieldDefault = Key (-1)
 

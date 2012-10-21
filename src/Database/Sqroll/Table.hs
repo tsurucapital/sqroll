@@ -38,6 +38,14 @@ data FieldInfo t a = FieldInfo
     , fieldExtract :: t -> a
     }
 
+fieldNames :: forall t a. Field a => FieldInfo t a -> [String]
+fieldNames fi = case fieldTypes (undefined :: a) of
+    [_] -> [fieldName fi]
+    ft  -> [fieldName fi ++ "_" ++ show i | i <- [0 .. length ft - 1]]
+
+fieldColumns :: forall t a. Field a => FieldInfo t a -> Int
+fieldColumns _ = length $ fieldTypes (undefined :: a)
+
 data Table t f where
     -- Applicative interface
     Map  :: (a -> b) -> Table t a -> Table t b
@@ -90,7 +98,7 @@ tableFields :: forall t. NamedTable t -> [(String, SqlType)]
 tableFields = tableFoldMap fieldName'
   where
     fieldName' :: forall a. Field a => FieldInfo t a -> [(String, SqlType)]
-    fieldName' fi = [(fieldName fi, fieldType (undefined :: a))]
+    fieldName' fi = zip (fieldNames fi) (fieldTypes (undefined :: a))
 
 tableCreate :: NamedTable t -> String
 tableCreate table =
@@ -125,12 +133,21 @@ tableSelect table =
     " FROM " ++ tableName table
 
 tablePoke :: forall t. NamedTable t -> SqlStmt -> (t -> IO ())
-tablePoke table stmt =
-    let pokers = zipWith ($) (tableFoldMap go table) [1 ..]
-    in \x -> mapM_ ($ x) pokers
+tablePoke (NamedTable _ table) stmt = \t -> go table t 1 >> return ()
   where
-    go :: forall a. Field a => FieldInfo t a -> [Int -> t -> IO ()]
-    go fi = [\n x -> fieldPoke stmt n (fieldExtract fi x)]
+    -- go :: forall a. Field a => FieldInfo t a -> [Int -> t -> IO ()]
+    -- go fi = [\n x -> fieldPoke stmt n (fieldExtract fi x)]
+
+    go :: forall a. Table t a -> t -> Int -> IO Int
+    go (Map _ t)      x !n = go t x n
+    go (Pure _)       _ !n = return n
+    go (App ft t)     x !n = do
+        n'  <- go ft x n
+        n'' <- go t x n'
+        return n''
+    go (Primitive fi) x !n = do
+        fieldPoke stmt n (fieldExtract fi x)
+        return (n + fieldColumns fi)
 
 tablePeek :: forall t. NamedTable t -> SqlStmt -> IO t
 tablePeek (NamedTable _ table) stmt = do
@@ -144,9 +161,9 @@ tablePeek (NamedTable _ table) stmt = do
         (f, n')  <- go ft n
         (x, n'') <- go t n'
         return (f x, n'')
-    go (Primitive _) !n = do
+    go (Primitive fi) !n = do
         x <- fieldPeek stmt n
-        return (x, n + 1)
+        return (x, n + fieldColumns fi)
 
 -- | Get the names of the columns with which the second table refers to the
 -- first table. In principle, there should be only one.

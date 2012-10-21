@@ -18,15 +18,15 @@ import System.Locale (defaultTimeLocale)
 import Database.Sqroll.Sqlite3
 
 class Field a where
-    fieldType    :: a -> SqlType   -- Should work with 'undefined'
-    fieldRefers  :: a -> [String]  -- Should work with 'undefined'
+    fieldTypes   :: a -> [SqlType]  -- Should work with 'undefined'
+    fieldRefers  :: a -> [String]   -- Should work with 'undefined'
     fieldDefault :: a
     fieldPoke    :: SqlStmt -> Int -> a -> IO ()
     fieldPeek    :: SqlStmt -> Int -> IO a
 
     -- Defaults: use Beamable
-    default fieldType :: a -> SqlType
-    fieldType = const SqlBlob
+    default fieldTypes :: Beamable a => a -> [SqlType]
+    fieldTypes = const [SqlBlob]
 
     default fieldRefers :: a -> [String]
     fieldRefers = const []
@@ -41,7 +41,7 @@ class Field a where
     fieldPeek stmt n = fmap decode $ sqlColumnByteString stmt n
 
 instance Field Int where
-    fieldType    = const SqlInteger
+    fieldTypes   = const [SqlInteger]
     fieldDefault = 0
 
     fieldPoke stmt n = sqlBindInt64 stmt n . fromIntegral
@@ -51,7 +51,7 @@ instance Field Int where
     {-# INLINE fieldPeek #-}
 
 instance Field Bool where
-    fieldType    = const SqlInteger
+    fieldTypes   = const [SqlInteger]
     fieldDefault = False
 
     fieldPoke stmt n False = sqlBindInt64 stmt n 0
@@ -62,7 +62,7 @@ instance Field Bool where
     {-# INLINE fieldPeek #-}
 
 instance Field Int64 where
-    fieldType    = const SqlInteger
+    fieldTypes   = const [SqlInteger]
     fieldDefault = 0
 
     fieldPoke = sqlBindInt64
@@ -72,7 +72,7 @@ instance Field Int64 where
     {-# INLINE fieldPeek #-}
 
 instance Field String where
-    fieldType    = const SqlText
+    fieldTypes   = const [SqlText]
     fieldDefault = ""
 
     fieldPoke = sqlBindString
@@ -82,7 +82,7 @@ instance Field String where
     {-# INLINE fieldPeek #-}
 
 instance Field Double where
-    fieldType    = const SqlDouble
+    fieldTypes   = const [SqlDouble]
     fieldDefault = 0
 
     fieldPoke    = sqlBindDouble
@@ -92,7 +92,7 @@ instance Field Double where
     {-# INLINE fieldPeek #-}
 
 instance Field ByteString where
-    fieldType    = const SqlBlob
+    fieldTypes   = const [SqlBlob]
     fieldDefault = B.empty
 
     fieldPoke = sqlBindByteString
@@ -102,7 +102,7 @@ instance Field ByteString where
     {-# INLINE fieldPeek #-}
 
 instance Field BL.ByteString where
-    fieldType    = const SqlBlob
+    fieldTypes   = const [SqlBlob]
     fieldDefault = BL.empty
 
     fieldPoke = sqlBindLazyByteString
@@ -112,7 +112,7 @@ instance Field BL.ByteString where
     {-# INLINE fieldPeek #-}
 
 instance forall a. Field a => Field (Maybe a) where
-    fieldType    = const $ fieldType (undefined :: a)
+    fieldTypes   = const $ fieldTypes (undefined :: a)
     fieldDefault = Nothing
 
     fieldPoke stmt n Nothing  = sqlBindNothing stmt n
@@ -127,7 +127,7 @@ instance forall a. Field a => Field (Maybe a) where
     {-# INLINE fieldPeek #-}
 
 instance Field UTCTime where
-    fieldType    = const SqlText
+    fieldTypes   = const [SqlText]
     fieldDefault = UTCTime (ModifiedJulianDay 0) 0
 
     fieldPoke stmt n time = sqlBindString stmt n (formatSqliteTime time)
