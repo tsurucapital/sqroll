@@ -6,6 +6,7 @@ module Database.Sqroll.Table.Field
     , fieldIndexed
     ) where
 
+import Control.Applicative ((<$>), (<*>))
 import Data.Beamable (Beamable, decode, encode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -134,6 +135,20 @@ instance Field UTCTime where
     {-# INLINE fieldPoke #-}
 
     fieldPeek stmt = fmap parseSqliteTime . sqlColumnString stmt
+    {-# INLINE fieldPeek #-}
+
+instance forall a b. (Field a, Field b) => Field (a, b) where
+    fieldTypes _ = fieldTypes (undefined :: a) ++ fieldTypes (undefined :: b)
+    fieldDefault = (fieldDefault, fieldDefault)
+
+    fieldPoke stmt n (x, y) = do
+        fieldPoke stmt n x
+        fieldPoke stmt (n + length (fieldTypes x)) y
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek stmt n = (,)
+        <$> fieldPeek stmt n
+        <*> fieldPeek stmt (n + length (fieldTypes (undefined :: a)))
     {-# INLINE fieldPeek #-}
 
 fieldIndexed :: Field a => a -> Bool

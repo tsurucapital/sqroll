@@ -146,6 +146,7 @@ tablePoke (NamedTable _ table) stmt = \t -> go table t 1 >> return ()
         n'' <- go t x n'
         return n''
     go (Primitive fi) x !n = do
+        putStrLn $ "Poking " ++ fieldName fi ++ ": " ++ show n
         fieldPoke stmt n (fieldExtract fi x)
         return (n + fieldColumns fi)
 
@@ -162,6 +163,7 @@ tablePeek (NamedTable _ table) stmt = do
         (x, n'') <- go t n'
         return (f x, n'')
     go (Primitive fi) !n = do
+        putStrLn $ "Peeking " ++ fieldName fi ++ ": " ++ show n
         x <- fieldPeek stmt n
         return (x, n + fieldColumns fi)
 

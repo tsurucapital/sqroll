@@ -11,6 +11,9 @@ module Database.Sqroll.Tests.Types
     , FooBar (..)
     , testFooBars
 
+    , HasTuple (..)
+    , testHasTuples
+
     , Dog (..)
     , DogOwner (..)
     ) where
@@ -57,6 +60,16 @@ instance HasTable FooBar
 
 testFooBars :: [FooBar]
 testFooBars = [FooBar [Left "NANANANANANA", Right 3, Left "sup"]]
+
+data HasTuple = HasTuple
+    { hasTupleFoo :: (Int, String)
+    , hasTupleBar :: ((String, Int), Bool)
+    } deriving (Eq, Generic, Show)
+
+instance HasTable HasTuple
+
+testHasTuples :: [HasTuple]
+testHasTuples = [HasTuple (3, "hi") (("foo", 10), True)]
 
 newtype Dog = Dog {unDog :: Kitten}
     deriving (Eq, Generic, Show)
