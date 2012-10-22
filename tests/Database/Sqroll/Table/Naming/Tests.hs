@@ -19,6 +19,7 @@ testMakeFieldName :: Assertion
 testMakeFieldName = do
     "first_name" @=? makeFieldName "Person" "_personFirstName"
     "first_name" @=? makeFieldName "Person" "personFirstName"
+    "first_name_1" @=? makeFieldName "Person" "personFirstName1"
 
 testUnCamelCase :: Assertion
 testUnCamelCase = do
@@ -26,3 +27,4 @@ testUnCamelCase = do
     "io_ref"       @=? unCamelCase "IORef"
     "foo_bar"      @=? unCamelCase "FooBar"
     "request_http" @=? unCamelCase "RequestHTTP"
+    "request_http1" @=? unCamelCase "RequestHTTP1"

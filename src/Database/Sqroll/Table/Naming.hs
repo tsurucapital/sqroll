@@ -3,7 +3,7 @@ module Database.Sqroll.Table.Naming
     , unCamelCase
     ) where
 
-import Data.Char (isUpper, toLower)
+import Data.Char (isUpper, toLower, isDigit)
 import Data.List (intercalate, isPrefixOf)
 
 makeFieldName :: String -> String -> String
@@ -27,6 +27,7 @@ unCamelCase = intercalate "_" . map (map toLower) . caseGroup
 -- > caseGroup "IORef"       == ["IO", "Ref"]
 -- > caseGroup "FooBar"      == ["Foo", "Bar"]
 -- > caseGroup "RequestHTTP" == ["Request", "HTTP"]
+-- > caseGroup "HTML5"       == ["HTML5"]
 --
 caseGroup :: String -> [String]
 caseGroup = mergeSingles . caseGroup'
@@ -47,4 +48,4 @@ caseGroup = mergeSingles . caseGroup'
         | null x    = [h] : caseGroup' xs
         | otherwise = (h : x) : caseGroup' xs
       where
-        (x, xs) = break isUpper str
+        (x, xs) = break (\c -> isUpper c || isDigit c) str
