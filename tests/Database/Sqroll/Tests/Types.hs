@@ -66,7 +66,7 @@ data HasTuple = HasTuple
     , hasTupleBar :: ((String, Int), Bool)
     , hasTupleQux :: (String, Int, Bool)
     , hasTupleWuu :: (String, Int, Bool, String)
-    , hasTupleSev :: (Int, Int, Int, Int, Int, Int, Int)
+    , hasTuple7 :: (Int, Int, Int, Int, Int, Int, Int)
     } deriving (Eq, Generic, Show)
 
 instance HasTable HasTuple
