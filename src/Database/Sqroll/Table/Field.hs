@@ -113,7 +113,7 @@ instance Field BL.ByteString where
     {-# INLINE fieldPeek #-}
 
 instance forall a. Field a => Field (Maybe a) where
-    fieldTypes   = const $ fieldTypes (undefined :: a)
+    fieldTypes   = const $ fieldTypes (ud :: a)
     fieldDefault = Nothing
 
     fieldPoke stmt n Nothing  = sqlBindNothing stmt n
@@ -138,18 +138,57 @@ instance Field UTCTime where
     {-# INLINE fieldPeek #-}
 
 instance forall a b. (Field a, Field b) => Field (a, b) where
-    fieldTypes _ = fieldTypes (undefined :: a) ++ fieldTypes (undefined :: b)
+    fieldTypes _ = fieldTypes (ud :: a) ++ fieldTypes (ud :: b)
     fieldDefault = (fieldDefault, fieldDefault)
 
     fieldPoke stmt n (x, y) = do
         fieldPoke stmt n x
-        fieldPoke stmt (n + length (fieldTypes x)) y
+        fieldPoke stmt (n + cols x) y
     {-# INLINE fieldPoke #-}
 
     fieldPeek stmt n = (,)
         <$> fieldPeek stmt n
-        <*> fieldPeek stmt (n + length (fieldTypes (undefined :: a)))
+        <*> fieldPeek stmt (n + cols (ud :: a))
     {-# INLINE fieldPeek #-}
+
+instance forall a b c. (Field a, Field b, Field c) => Field (a, b, c) where
+    fieldTypes _ =
+        fieldTypes (ud :: a) ++ fieldTypes (ud :: b) ++ fieldTypes (ud :: c)
+    fieldDefault = (fieldDefault, fieldDefault, fieldDefault)
+
+    fieldPoke stmt n (x, y, z) = do
+        let n'  = n  + cols x
+            n'' = n' + cols y
+        fieldPoke stmt n   x
+        fieldPoke stmt n'  y
+        fieldPoke stmt n'' z
+
+    fieldPeek stmt n = do
+        let n'  = n  + cols (ud :: a)
+            n'' = n' + cols (ud :: b)
+        (,,) <$> fieldPeek stmt n <*> fieldPeek stmt n' <*> fieldPeek stmt n''
+
+instance forall a b c d. (Field a, Field b, Field c, Field d) =>
+        Field (a, b, c, d) where
+    fieldTypes _ = fieldTypes (ud :: a) ++ fieldTypes (ud :: b) ++
+        fieldTypes (ud :: c) ++ fieldTypes (ud :: d)
+    fieldDefault = (fieldDefault, fieldDefault, fieldDefault, fieldDefault)
+
+    fieldPoke stmt n (x, y, z, u) = do
+        let n'   = n   + cols x
+            n''  = n'  + cols y
+            n''' = n'' + cols z
+        fieldPoke stmt n    x
+        fieldPoke stmt n'   y
+        fieldPoke stmt n''  z
+        fieldPoke stmt n''' u
+
+    fieldPeek stmt n = do
+        let n'   = n   + cols (ud :: a)
+            n''  = n'  + cols (ud :: b)
+            n''' = n'' + cols (ud :: c)
+        (,,,) <$> fieldPeek stmt n <*> fieldPeek stmt n' <*>
+            fieldPeek stmt n'' <*> fieldPeek stmt n'''
 
 fieldIndexed :: Field a => a -> Bool
 fieldIndexed = not . null . fieldRefers
@@ -168,3 +207,12 @@ parseSqliteTime string =
 sqliteTimeFmt :: String
 sqliteTimeFmt = "%Y-%m-%d %H:%M:%S%Q"
 {-# INLINE sqliteTimeFmt #-}
+
+-- | Shorthand...
+ud :: a
+ud = undefined
+{-# INLINE ud #-}
+
+cols :: Field a => a -> Int
+cols = length . fieldTypes
+{-# INLINE cols #-}

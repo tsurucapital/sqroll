@@ -64,12 +64,15 @@ testFooBars = [FooBar [Left "NANANANANANA", Right 3, Left "sup"]]
 data HasTuple = HasTuple
     { hasTupleFoo :: (Int, String)
     , hasTupleBar :: ((String, Int), Bool)
+    , hasTupleQux :: (String, Int, Bool)
+    , hasTupleWuu :: (String, Int, Bool, String)
     } deriving (Eq, Generic, Show)
 
 instance HasTable HasTuple
 
 testHasTuples :: [HasTuple]
-testHasTuples = [HasTuple (3, "hi") (("foo", 10), True)]
+testHasTuples = return $ HasTuple (3, "hi") (("foo", 10), True) ("oh", 1, False)
+    ("hellllo", 1222, True, "<_<")
 
 newtype Dog = Dog {unDog :: Kitten}
     deriving (Eq, Generic, Show)

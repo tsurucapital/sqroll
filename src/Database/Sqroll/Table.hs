@@ -43,8 +43,8 @@ fieldNames fi = case fieldTypes (undefined :: a) of
     [_] -> [fieldName fi]
     ft  -> [fieldName fi ++ "_" ++ show i | i <- [0 .. length ft - 1]]
 
-fieldColumns :: forall t a. Field a => FieldInfo t a -> Int
-fieldColumns _ = length $ fieldTypes (undefined :: a)
+fieldColumns' :: forall t a. Field a => FieldInfo t a -> Int
+fieldColumns' _ = length $ fieldTypes (undefined :: a)
 
 data Table t f where
     -- Applicative interface
@@ -146,9 +146,8 @@ tablePoke (NamedTable _ table) stmt = \t -> go table t 1 >> return ()
         n'' <- go t x n'
         return n''
     go (Primitive fi) x !n = do
-        putStrLn $ "Poking " ++ fieldName fi ++ ": " ++ show n
         fieldPoke stmt n (fieldExtract fi x)
-        return (n + fieldColumns fi)
+        return (n + fieldColumns' fi)
 
 tablePeek :: forall t. NamedTable t -> SqlStmt -> IO t
 tablePeek (NamedTable _ table) stmt = do
@@ -163,9 +162,8 @@ tablePeek (NamedTable _ table) stmt = do
         (x, n'') <- go t n'
         return (f x, n'')
     go (Primitive fi) !n = do
-        putStrLn $ "Peeking " ++ fieldName fi ++ ": " ++ show n
         x <- fieldPeek stmt n
-        return (x, n + fieldColumns fi)
+        return (x, n + fieldColumns' fi)
 
 -- | Get the names of the columns with which the second table refers to the
 -- first table. In principle, there should be only one.
