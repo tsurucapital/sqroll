@@ -185,10 +185,11 @@ tableMakeDefaults sql defaultRecord (NamedTable name table) = do
     return $ NamedTable name $ go present table
   where
     go :: forall a. [String] -> Table t a -> Table t a
-    go p (Map f t)              = Map f (go p t)
-    go _ (Pure x)               = Pure x
-    go p (App ft t)             = App (go p ft) (go p t)
+    go p (Map f t)  = Map f (go p t)
+    go _ (Pure x)   = Pure x
+    go p (App ft t) = App (go p ft) (go p t)
     go p (Primitive fi)
-        | fieldName fi `elem` p = Primitive fi
-        | otherwise             = Pure $
+        -- All field names need to be present...
+        | all (`elem` p) (fieldNames fi) = Primitive fi
+        | otherwise                      = Pure $
             maybe fieldDefault (fieldExtract fi) defaultRecord
