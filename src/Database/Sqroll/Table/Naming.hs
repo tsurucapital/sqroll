@@ -7,7 +7,8 @@ import Data.Char (isUpper, toLower, isDigit)
 import Data.List (intercalate, isPrefixOf)
 
 makeFieldName :: String -> String -> String
-makeFieldName dtn = unCamelCase . dropLowerPrefix dtn . dropLeadingUnderscore
+makeFieldName dtn = validPrefix .
+    unCamelCase . dropLowerPrefix dtn . dropLeadingUnderscore
 
 dropLowerPrefix :: String -> String -> String
 dropLowerPrefix prefix str
@@ -20,6 +21,11 @@ dropLeadingUnderscore xs         = xs
 
 unCamelCase :: String -> String
 unCamelCase = intercalate "_" . map (map toLower) . caseGroup
+
+validPrefix :: String -> String
+validPrefix str
+    | null str || isDigit (head str) = '_' : str
+    | otherwise                      = str
 
 -- | Group a name based on caps in a more or less intuitive way
 --

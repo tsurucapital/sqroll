@@ -20,6 +20,7 @@ testMakeFieldName = do
     "first_name" @=? makeFieldName "Person" "_personFirstName"
     "first_name" @=? makeFieldName "Person" "personFirstName"
     "first_name_1" @=? makeFieldName "Person" "personFirstName1"
+    "_1"         @=? makeFieldName "Person" "person1"
 
 testUnCamelCase :: Assertion
 testUnCamelCase = do
