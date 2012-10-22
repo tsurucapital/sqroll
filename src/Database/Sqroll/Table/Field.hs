@@ -190,6 +190,98 @@ instance forall a b c d. (Field a, Field b, Field c, Field d) =>
         (,,,) <$> fieldPeek stmt n <*> fieldPeek stmt n' <*>
             fieldPeek stmt n'' <*> fieldPeek stmt n'''
 
+instance forall a b c d e. (Field a, Field b, Field c, Field d, Field e) =>
+        Field (a, b, c, d, e) where
+    fieldTypes _ = fieldTypes (ud :: a) ++ fieldTypes (ud :: b) ++
+        fieldTypes (ud :: c) ++ fieldTypes (ud :: d) ++ fieldTypes (ud :: e)
+    fieldDefault = (fieldDefault, fieldDefault, fieldDefault, fieldDefault, fieldDefault)
+
+    fieldPoke stmt n0 (f0, f1, f2, f3, f4) = do
+        let n1 = n0 + cols f0
+            n2 = n1 + cols f1
+            n3 = n2 + cols f2
+            n4 = n3 + cols f3
+        fieldPoke stmt n0 f0
+        fieldPoke stmt n1 f1
+        fieldPoke stmt n2 f2
+        fieldPoke stmt n3 f3
+        fieldPoke stmt n4 f4
+
+    fieldPeek stmt n0 = do
+        let n1 = n0 + cols (ud :: a)
+            n2 = n1 + cols (ud :: b)
+            n3 = n2 + cols (ud :: c)
+            n4 = n3 + cols (ud :: d)
+        (,,,,) <$> fieldPeek stmt n0 <*> fieldPeek stmt n1 <*>
+            fieldPeek stmt n2 <*> fieldPeek stmt n3 <*> fieldPeek stmt n4
+
+instance forall a b c d e f. (Field a, Field b, Field c, Field d, Field e, Field f) =>
+        Field (a, b, c, d, e, f) where
+    fieldTypes _ = fieldTypes (ud :: a) ++ fieldTypes (ud :: b) ++
+        fieldTypes (ud :: c) ++ fieldTypes (ud :: d) ++ fieldTypes (ud :: e) ++
+        fieldTypes (ud :: f)
+
+    fieldDefault = (fieldDefault, fieldDefault, fieldDefault, fieldDefault,
+                    fieldDefault, fieldDefault)
+
+    fieldPoke stmt n0 (f0, f1, f2, f3, f4, f5) = do
+        let n1 = n0 + cols f0
+            n2 = n1 + cols f1
+            n3 = n2 + cols f2
+            n4 = n3 + cols f3
+            n5 = n4 + cols f4
+        fieldPoke stmt n0 f0
+        fieldPoke stmt n1 f1
+        fieldPoke stmt n2 f2
+        fieldPoke stmt n3 f3
+        fieldPoke stmt n4 f4
+        fieldPoke stmt n5 f5
+
+    fieldPeek stmt n0 = do
+        let n1 = n0 + cols (ud :: a)
+            n2 = n1 + cols (ud :: b)
+            n3 = n2 + cols (ud :: c)
+            n4 = n3 + cols (ud :: d)
+            n5 = n4 + cols (ud :: f)
+        (,,,,,) <$> fieldPeek stmt n0 <*> fieldPeek stmt n1 <*>
+            fieldPeek stmt n2 <*> fieldPeek stmt n3 <*> fieldPeek stmt n4 <*>
+            fieldPeek stmt n5
+
+instance forall a b c d e f g. (Field a, Field b, Field c, Field d, Field e, Field f, Field g) =>
+        Field (a, b, c, d, e, f, g) where
+    fieldTypes _ = fieldTypes (ud :: a) ++ fieldTypes (ud :: b) ++ fieldTypes (ud :: c) ++
+                   fieldTypes (ud :: d) ++ fieldTypes (ud :: e) ++ fieldTypes (ud :: f) ++
+                   fieldTypes (ud :: g)
+
+    fieldDefault = (fieldDefault, fieldDefault, fieldDefault, fieldDefault,
+                    fieldDefault, fieldDefault, fieldDefault)
+
+    fieldPoke stmt n0 (f0, f1, f2, f3, f4, f5, f6) = do
+        let n1 = n0 + cols f0
+            n2 = n1 + cols f1
+            n3 = n2 + cols f2
+            n4 = n3 + cols f3
+            n5 = n4 + cols f4
+            n6 = n5 + cols f5
+        fieldPoke stmt n0 f0
+        fieldPoke stmt n1 f1
+        fieldPoke stmt n2 f2
+        fieldPoke stmt n3 f3
+        fieldPoke stmt n4 f4
+        fieldPoke stmt n5 f5
+        fieldPoke stmt n6 f6
+
+    fieldPeek stmt n0 = do
+        let n1 = n0 + cols (ud :: a)
+            n2 = n1 + cols (ud :: b)
+            n3 = n2 + cols (ud :: c)
+            n4 = n3 + cols (ud :: d)
+            n5 = n4 + cols (ud :: f)
+            n6 = n5 + cols (ud :: g)
+        (,,,,,,) <$> fieldPeek stmt n0 <*> fieldPeek stmt n1 <*>
+            fieldPeek stmt n2 <*> fieldPeek stmt n3 <*> fieldPeek stmt n4 <*>
+            fieldPeek stmt n5 <*> fieldPeek stmt n6
+
 fieldIndexed :: Field a => a -> Bool
 fieldIndexed = not . null . fieldRefers
 
