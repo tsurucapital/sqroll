@@ -20,6 +20,7 @@ module Database.Sqroll.Internal
     , sqrollTailList
     , sqrollSelect
     , sqrollByKey
+    , sqrollAllByKey
     , sqrollSetDefault
     ) where
 
@@ -195,6 +196,14 @@ sqrollSelect sqroll key = do
     cache <- sqrollGetCache sqroll
     sqrollCacheSelect cache key
 {-# INLINE sqrollSelect #-}
+
+
+sqrollAllByKey :: (HasTable a, HasTable b)
+            => Sqroll -> Maybe a -> Key b -> IO [a]
+sqrollAllByKey db dflt key = do
+    ref <- newIORef []
+    sqrollByKey db dflt key (\x -> modifyIORef ref (x :))
+    reverse <$> readIORef ref
 
 sqrollByKey :: forall a b. (HasTable a, HasTable b)
             => Sqroll -> Maybe a -> Key b -> (a -> IO ()) -> IO ()

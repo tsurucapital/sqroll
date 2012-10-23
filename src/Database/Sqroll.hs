@@ -16,6 +16,7 @@ module Database.Sqroll
     , sqrollTailList
     , sqrollSelect
     , sqrollByKey
+    , sqrollAllByKey
     , sqrollSetDefault
     ) where
 
