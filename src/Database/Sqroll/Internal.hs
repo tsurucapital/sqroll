@@ -2,6 +2,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Database.Sqroll.Internal
     ( NamedTable (..)
 
@@ -53,7 +54,7 @@ aliasTable name mk unmk =
 
 -- Maybe rename to SqrollKey?
 newtype Key a = Key {unKey :: SqlRowId}
-    deriving (Eq, Show)
+    deriving (Eq, Show, Enum, Ord)
 
 instance forall a. HasTable a => Field (Key a) where
     fieldTypes   = const [SqlInteger]
