@@ -74,18 +74,18 @@ testRunLog = withTmpScroll $ \sqroll -> do
     1 @=? length cache'
 
     (generations, _) <- sqrollTailList sqroll (Key 0)
-    generations @?=
+    (map entityVal generations) @?=
         [ Generation 1 "testgen"
         , Generation 4 "alexgen"
         ]
 
     (instruments, _) <- sqrollTailList sqroll (Key 0)
-    instruments @?=
+    (map entityVal instruments) @?=
         [ Instrument "cookies"
         ]
 
     (bids, _) <- sqrollTailList sqroll (Key 0)
-    bids @?=
+    (map entityVal bids) @?=
         [ Bid (Key 1) (Key 1) 10
         , Bid (Key 1) (Key 1) 12
         , Bid (Key 2) (Key 1) 20

@@ -3,6 +3,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Database.Sqroll.Internal
     ( NamedTable (..)
 
@@ -10,6 +12,7 @@ module Database.Sqroll.Internal
     , aliasTable
 
     , Key (..)
+    , Entity (..)
 
     , Sqroll (sqrollSql)
     , sqrollOpen
@@ -56,6 +59,12 @@ aliasTable name mk unmk =
 newtype Key a = Key {unKey :: SqlRowId}
     deriving (Eq, Show, Enum, Ord)
 
+data Entity a
+    = Entity
+    { entityKey :: (Key a)
+    , entityVal :: a
+    } deriving (Eq, Show, Ord)
+
 instance forall a. HasTable a => Field (Key a) where
     fieldTypes   = const [SqlInteger]
     fieldRefers  = const [tableName (table :: NamedTable a)]
@@ -69,8 +78,8 @@ instance forall a. HasTable a => Field (Key a) where
 
 data SqrollCache a = SqrollCache
     { sqrollCacheAppend   :: a -> IO ()
-    , sqrollCacheTail     :: Key a -> (a -> IO ()) -> IO (Key a)
-    , sqrollCacheSelect   :: Key a -> IO a
+    , sqrollCacheTail     :: Key a -> (Entity a -> IO ()) -> IO (Key a)
+    , sqrollCacheSelect   :: Key a -> IO (Entity a)
     , sqrollCacheFinalize :: IO ()
     }
 
@@ -94,7 +103,9 @@ makeSqrollCacheFor sqroll defaultRecord = do
     tailStmt   <- sqlPrepare sql $
         tableSelect table' ++ " WHERE rowid >= ? ORDER BY rowid"
     let poker  = tablePoke table' appendStmt
-        peeker = tablePeek table' tailStmt
+        peeker = do entityKey <- Key <$> sqlGetRowId tailStmt
+                    entityVal <- tablePeek table' tailStmt
+                    return Entity {..}
 
     -- These should be reasonably fast
     let append x = poker x >> sqlStep appendStmt >> sqlReset appendStmt
@@ -179,20 +190,20 @@ sqrollAppend sqroll x = do
     sqrollCacheAppend cache x
 {-# INLINE sqrollAppend #-}
 
-sqrollTail :: HasTable a => Sqroll -> Key a -> (a -> IO ()) -> IO (Key a)
+sqrollTail :: HasTable a => Sqroll -> Key a -> (Entity a -> IO ()) -> IO (Key a)
 sqrollTail sqroll key f = do
     cache <- sqrollGetCache sqroll
     sqrollCacheTail cache key f
 {-# INLINE sqrollTail #-}
 
-sqrollTailList :: HasTable a => Sqroll -> Key a -> IO ([a], Key a)
+sqrollTailList :: HasTable a => Sqroll -> Key a -> IO ([Entity a], Key a)
 sqrollTailList sqroll key = do
     ref  <- newIORef []
     key' <- sqrollTail sqroll key $ \x -> modifyIORef ref (x :)
     xs   <- reverse <$> readIORef ref
     return (xs, key')
 
-sqrollSelect :: HasTable a => Sqroll -> Key a -> IO a
+sqrollSelect :: HasTable a => Sqroll -> Key a -> IO (Entity a)
 sqrollSelect sqroll key = do
     cache <- sqrollGetCache sqroll
     sqrollCacheSelect cache key
@@ -200,14 +211,14 @@ sqrollSelect sqroll key = do
 
 
 sqrollByKeyList :: (HasTable a, HasTable b)
-            => Sqroll -> Maybe a -> Key b -> IO [a]
+            => Sqroll -> Maybe a -> Key b -> IO [Entity a]
 sqrollByKeyList db dflt key = do
     ref <- newIORef []
     sqrollByKey db dflt key (\x -> modifyIORef ref (x :))
     reverse <$> readIORef ref
 
 sqrollByKey :: forall a b. (HasTable a, HasTable b)
-            => Sqroll -> Maybe a -> Key b -> (a -> IO ()) -> IO ()
+            => Sqroll -> Maybe a -> Key b -> (Entity a -> IO ()) -> IO ()
 sqrollByKey sqroll defaultRecord key f = do
     -- Note: this method currently doesn't use caching of statements/peekers as
     -- the other methods in the module do.
@@ -220,7 +231,10 @@ sqrollByKey sqroll defaultRecord key f = do
         (c : _) -> do
             stmt <- sqlPrepare sql $
                 tableSelect table' ++ " WHERE " ++ c ++ " = ?"
-            let peeker = tablePeek table' stmt
+            let peeker = do entityKey <- Key <$> sqlGetRowId stmt
+                            entityVal <- tablePeek table' stmt
+                            return Entity {..}
+
             sqlBindInt64 stmt 1 (unKey key)
             sqlStepAll stmt (peeker >>= f)
             sqlFinalize stmt

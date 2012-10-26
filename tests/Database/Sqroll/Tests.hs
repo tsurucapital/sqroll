@@ -49,7 +49,7 @@ testModifiedTypes = do
 
     -- Check that they are equal, defaults worked, everyone is happy, rainbows,
     -- unicorns etc.
-    ModifiedTypes.User "John" "Doe" "m@jaspervdj.be" 32 @=? user
+    ModifiedTypes.User "John" "Doe" "m@jaspervdj.be" 32 @=? (entityVal user)
 
     removeFile tmpPath
 
@@ -86,10 +86,10 @@ testSqrollByKey = withTmpScroll $ \sqroll -> do
     sqrollAppend sqroll $ DogOwner "Marit" (Key $ unKey key + 1)
 
     sqrollByKey sqroll Nothing key $ \owner ->
-        DogOwner "Jasper" key @=? owner
+        DogOwner "Jasper" key @=? (entityVal owner)
 
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
 testAppendTail items = withTmpScroll $ \sqroll -> do
     mapM_ (sqrollAppend sqroll) items
     (items', _) <- sqrollTailList sqroll (Key 0)
-    items @=? items'
+    items @=? (map entityVal items')

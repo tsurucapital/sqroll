@@ -5,6 +5,7 @@ module Database.Sqroll
     , aliasTable
 
     , Key (..)
+    , Entity (..)
 
     , Sqroll (sqrollSql)
     , sqrollOpen
