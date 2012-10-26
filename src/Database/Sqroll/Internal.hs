@@ -102,7 +102,7 @@ makeSqrollCacheFor sqroll defaultRecord = do
         tail' (Key rowid) f = do
             sqlBindInt64 tailStmt 1 rowid
             sqlStepAll tailStmt (peeker >>= f)
-            rowid' <- sqlLastSelectRowId tailStmt
+            rowid' <- sqlGetRowId tailStmt
             sqlReset tailStmt
             return $ Key $ rowid' + 1
 

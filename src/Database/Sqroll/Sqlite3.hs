@@ -38,7 +38,7 @@ module Database.Sqroll.Sqlite3
     , sqlColumnIsNothing
 
     , sqlLastInsertRowId
-    , sqlLastSelectRowId
+    , sqlGetRowId
 
     , sqlTableColumns
     ) where
@@ -301,9 +301,9 @@ sqlLastInsertRowId :: Sql -> IO SqlRowId
 sqlLastInsertRowId = fmap fromIntegral . sqlite3_last_insert_rowid
 {-# INLINE sqlLastInsertRowId #-}
 
-sqlLastSelectRowId :: SqlStmt -> IO SqlRowId
-sqlLastSelectRowId stmt = sqlColumnInt64 stmt 0
-{-# INLINE sqlLastSelectRowId #-}
+sqlGetRowId :: SqlStmt -> IO SqlRowId
+sqlGetRowId stmt = sqlColumnInt64 stmt 0
+{-# INLINE sqlGetRowId #-}
 
 -- | Get all the column names for a given table
 sqlTableColumns :: Sql -> String -> IO [String]
