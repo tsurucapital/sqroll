@@ -21,7 +21,7 @@ module Database.Sqroll.Internal
     , sqrollTailList
     , sqrollSelect
     , sqrollByKey
-    , sqrollAllByKey
+    , sqrollByKeyList
     , sqrollSetDefault
     ) where
 
@@ -199,9 +199,9 @@ sqrollSelect sqroll key = do
 {-# INLINE sqrollSelect #-}
 
 
-sqrollAllByKey :: (HasTable a, HasTable b)
+sqrollByKeyList :: (HasTable a, HasTable b)
             => Sqroll -> Maybe a -> Key b -> IO [a]
-sqrollAllByKey db dflt key = do
+sqrollByKeyList db dflt key = do
     ref <- newIORef []
     sqrollByKey db dflt key (\x -> modifyIORef ref (x :))
     reverse <$> readIORef ref
