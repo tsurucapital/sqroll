@@ -315,5 +315,37 @@ sqlTableColumns sql tableName = do
 
 orDie :: String -> SqlStatus -> IO ()
 orDie _   0 = return ()
-orDie msg s = error $ msg ++ ": status " ++ show s
+orDie msg s = error $ msg ++ ": status " ++ showStatus s
 {-# INLINE orDie #-}
+
+showStatus :: SqlStatus -> String
+showStatus 0 = "Successful result"
+showStatus 1 = "SQL error or missing database"
+showStatus 2 = "Internal logic error in SQLite"
+showStatus 3 = "Access permission denied"
+showStatus 4 = "Callback routine requested an abort"
+showStatus 5 = "The database file is locked"
+showStatus 6 = "A table in the database is locked"
+showStatus 7 = "A malloc() failed"
+showStatus 8 = "Attempt to write a readonly database"
+showStatus 9 = "Operation terminated by sqlite3_interrupt()"
+showStatus 10 = "Some kind of disk I/O error occurred"
+showStatus 11 = "The database disk image is malformed"
+showStatus 12 = "Unknown opcode in sqlite3_file_control()"
+showStatus 13 = "Insertion failed because database is full"
+showStatus 14 = "Unable to open the database file"
+showStatus 15 = "Database lock protocol error"
+showStatus 16 = "Database is empty"
+showStatus 17 = "The database schema changed"
+showStatus 18 = "String or BLOB exceeds size limit"
+showStatus 19 = "Abort due to constraint violation"
+showStatus 20 = "Data type mismatch"
+showStatus 21 = "Library used incorrectly"
+showStatus 22 = "Uses OS features not supported on host"
+showStatus 23 = "Authorization denied"
+showStatus 24 = "Auxiliary database format error"
+showStatus 25 = "2nd parameter to sqlite3_bind out of range"
+showStatus 26 = "File opened that is not a database file"
+showStatus 100 = "sqlite3_step() has another row ready"
+showStatus 101 = "sqlite3_step() has finished executing"
+showStatus _ = "Unknown error code"
