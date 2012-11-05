@@ -315,7 +315,7 @@ sqlTableColumns sql tableName = do
 
 orDie :: String -> SqlStatus -> IO ()
 orDie _   0 = return ()
-orDie msg s = error $ msg ++ ": status " ++ showStatus s
+orDie msg s = error $ msg ++ ": " ++ showStatus s
 {-# INLINE orDie #-}
 
 showStatus :: SqlStatus -> String
