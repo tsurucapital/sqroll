@@ -132,7 +132,7 @@ tableSelect table =
     "SELECT rowid, " ++ intercalate ", " (map fst $ tableFields table) ++
     " FROM " ++ tableName table
 
-tablePoke :: forall t. NamedTable t -> SqlStmt -> (t -> IO ())
+tablePoke :: forall t. NamedTable t -> SqlStmt -> t -> IO ()
 tablePoke (NamedTable _ table) stmt = \t -> go table t 1 >> return ()
   where
     -- go :: forall a. Field a => FieldInfo t a -> [Int -> t -> IO ()]
