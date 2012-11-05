@@ -31,11 +31,10 @@ data Log c where
 runLog :: Sqroll -> IORef c -> [Log c] -> IO ()
 runLog sqroll cache = mapM_ go
   where
-    go (Log x) = sqrollAppend sqroll x
+    go (Log x) = sqrollAppend_ sqroll x
 
     go (LogKey x f) = do
-        sqrollAppend sqroll x
-        key <- Key <$> sqlLastInsertRowId (sqrollSql sqroll)
+        key <- sqrollAppend sqroll x
         mapM_ go (f key)
 
     go (LogKeyCache x look insert f) = do
@@ -43,7 +42,6 @@ runLog sqroll cache = mapM_ go
         case look c of
             Just key -> mapM_ go (f key)
             Nothing  -> do
-                sqrollAppend sqroll x
-                key <- Key <$> sqlLastInsertRowId (sqrollSql sqroll)
+                key <- sqrollAppend sqroll x
                 modifyIORef cache (insert key)
                 mapM_ go (f key)

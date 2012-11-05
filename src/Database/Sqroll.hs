@@ -11,14 +11,25 @@ module Database.Sqroll
     , sqrollOpen
     , sqrollOpenWith
     , sqrollClose
+    , sqrollCheckpoint
+    , sqrollFinalize
+
     , sqrollTransaction
+
     , sqrollAppend
-    , sqrollTail
-    , sqrollTailList
-    , sqrollSelect
-    , sqrollByKey
-    , sqrollByKeyList
-    , sqrollSetDefault
+    , sqrollAppend_
+
+    , makeSelectStatement
+    , makeSelectByKeyStatement
+
+    , sqrollSelectEntitiy
+    , sqrollSelectFromRowId
+
+    , sqrollGetList
+    , sqrollGetLazyList
+    , sqrollFold
+    , sqrollFoldAll
+    , sqrollGetOne
     ) where
 
 import Database.Sqroll.Internal
