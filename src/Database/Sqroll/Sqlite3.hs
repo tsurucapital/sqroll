@@ -124,8 +124,8 @@ foreign import ccall "sqlite3.h sqlite3_prepare_v2" sqlite3_prepare_v2
     :: Sql -> CString -> CInt -> Ptr SqlStmt -> Ptr CString -> IO SqlStatus
 
 sqlPrepare :: Sql -> String -> IO SqlStmt
-sqlPrepare db str = alloca $ \stmtPtr -> withCString str $ \cstr -> do
-    sqlite3_prepare_v2 db cstr (-1) stmtPtr nullPtr >>=
+sqlPrepare db str = alloca $ \stmtPtr -> withCStringLen str $ \(cstr, len) -> do
+    sqlite3_prepare_v2 db cstr (fromIntegral len) stmtPtr nullPtr >>=
         orDie "sqlite3_prepare_v2"
     peek stmtPtr
 {-# INLINE sqlPrepare #-}
