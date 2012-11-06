@@ -13,6 +13,7 @@ module Database.Sqroll.Sqlite3
 
     , sqlOpen
     , sqlClose
+    , sqlCheckpoint
 
     , sqlPrepare
     , sqlFinalize
@@ -80,6 +81,17 @@ sqlTypeToString SqlText    = "TEXT"
 sqlTypeToString SqlDouble  = "DOUBLE"
 sqlTypeToString SqlBlob    = "BLOB"
 
+data SqliteCheckpoint
+    = Passive
+    | Full
+    | Restart
+    deriving (Show, Eq)
+
+sqliteCheckpoint :: SqliteCheckpoint -> CInt
+sqliteCheckpoint Passive = 0
+sqliteCheckpoint Full = 1
+sqliteCheckpoint Restart = 2
+
 data SqlOpenFlag
     = SqlOpenReadOnly
     | SqlOpenReadWrite
@@ -129,6 +141,13 @@ sqlPrepare db str = alloca $ \stmtPtr -> withCStringLen str $ \(cstr, len) -> do
         orDie "sqlite3_prepare_v2"
     peek stmtPtr
 {-# INLINE sqlPrepare #-}
+
+foreign import ccall "sqlite3.h sqlite3_wal_checkpoint_v2" sqlite3_wal_checkpoint_v2
+    :: Sql -> Ptr () -> CInt -> Ptr () -> Ptr () -> IO SqlStatus
+
+sqlCheckpoint :: Sql -> IO ()
+sqlCheckpoint db = sqlite3_wal_checkpoint_v2 db nullPtr (sqliteCheckpoint Full) nullPtr nullPtr
+        >>= orDie "sqlite3_wal_checkpoint_v2"
 
 sqlFinalize :: SqlStmt -> IO ()
 sqlFinalize stmt = sqlite3_finalize stmt >>= orDie "sqlite3_finalize"
