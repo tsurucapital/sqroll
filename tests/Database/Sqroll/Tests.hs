@@ -3,16 +3,13 @@ module Database.Sqroll.Tests
     ( tests
     ) where
 
-import Control.Applicative ((<$>))
 import Data.ByteString.Char8 ()
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
-import System.Directory (removeFile)
 
 import Database.Sqroll
 import qualified Database.Sqroll.Tests.ModifiedTypes as ModifiedTypes
-import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
 import Database.Sqroll.Tests.Types
 import Database.Sqroll.Tests.Util
@@ -34,24 +31,24 @@ testAppendTailUsers :: Assertion
 testAppendTailUsers = testAppendTail testUsers
 
 testModifiedTypes :: Assertion
-testModifiedTypes = do
+testModifiedTypes = withTmpFile $ \tmpPath -> do
     -- Insert a user type
-    (tmpPath, sqroll) <- sqrollOpenTmp
-    sqrollAppend sqroll $ User "John" "Doe" 32 "kittens"
-    rowid <- sqlLastInsertRowId (sqrollSql sqroll)
+    sqroll <- sqrollOpen tmpPath
+    sqrollAppend_ sqroll $ User "John" "Doe" 32 "kittens"
     sqrollClose sqroll
 
     -- Read a modified user type
     sqroll' <- sqrollOpen tmpPath
-    sqrollSetDefault sqroll' (Just ModifiedTypes.defaultUser)
-    user <- sqrollSelect sqroll' (Key rowid)
+    stmt <- makeSelectStatement sqroll' (Just ModifiedTypes.defaultUser)
+    user <- sqrollGetOne stmt
+    sqrollFinalize stmt
+
     sqrollClose sqroll'
 
     -- Check that they are equal, defaults worked, everyone is happy, rainbows,
     -- unicorns etc.
-    ModifiedTypes.User "John" "Doe" "m@jaspervdj.be" 32 @=? (entityVal user)
+    ModifiedTypes.User "John" "Doe" "m@jaspervdj.be" 32 @=? user
 
-    removeFile tmpPath
 
 testMaybeField :: Assertion
 testMaybeField = testAppendTail testKittens
@@ -78,18 +75,23 @@ testTableRefers = do
     ownerTable = table :: NamedTable DogOwner
 
 testSqrollByKey :: Assertion
-testSqrollByKey = withTmpScroll $ \sqroll -> do
-    sqrollAppend sqroll $ Dog (Kitten (Just "Quack"))
-    key <- Key <$> sqlLastInsertRowId (sqrollSql sqroll)
+testSqrollByKey = withTmpSqroll $ \sqroll -> do
+    key <- sqrollAppend sqroll $ Dog (Kitten (Just "Quack"))
 
-    sqrollAppend sqroll $ DogOwner "Jasper" key
-    sqrollAppend sqroll $ DogOwner "Marit" (Key $ unKey key + 1)
+    sqrollAppend_ sqroll $ DogOwner "Jasper" key
+    sqrollAppend_ sqroll $ DogOwner "Marit" (Key $ unKey key + 1)
 
-    sqrollByKey sqroll Nothing key $ \owner ->
-        DogOwner "Jasper" key @=? (entityVal owner)
+    stmt <- makeSelectByKeyStatement sqroll Nothing key
+    owner <- sqrollGetOne stmt
+    sqrollFinalize stmt
+
+    DogOwner "Jasper" key @=? owner
+
 
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
-testAppendTail items = withTmpScroll $ \sqroll -> do
+testAppendTail items = withTmpSqroll $ \sqroll -> do
     mapM_ (sqrollAppend sqroll) items
-    (items', _) <- sqrollTailList sqroll (Key 0)
-    items @=? (map entityVal items')
+    stmt <- makeSelectStatement sqroll Nothing
+    items' <- sqrollGetList stmt
+    sqrollFinalize stmt
+    items @=? items'

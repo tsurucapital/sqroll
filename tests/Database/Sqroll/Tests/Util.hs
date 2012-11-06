@@ -1,25 +1,27 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
 -- | Sqroll testing utilities
 module Database.Sqroll.Tests.Util
-    ( withTmpScroll
-    , sqrollOpenTmp
+    ( withTmpFile
+    , withTmpSqroll
     ) where
 
+import Control.Exception (bracket)
 import System.Directory (getTemporaryDirectory, removeFile)
 import System.FilePath ((</>))
 
 import Database.Sqroll
 
-withTmpScroll :: (Sqroll -> IO a) -> IO a
-withTmpScroll f = do
-    (tmpPath, sqroll) <- sqrollOpenTmp
-    x                 <- f sqroll
-    sqrollClose sqroll
-    removeFile tmpPath
-    return x
+withTmpFile :: (FilePath -> IO a) -> IO a
+withTmpFile = bracket getTmpFile removeFile
 
-sqrollOpenTmp :: IO (FilePath, Sqroll)
-sqrollOpenTmp = do
+
+getTmpFile :: IO FilePath
+getTmpFile = do
     tmpDir <- getTemporaryDirectory
-    let tmpPath = tmpDir </> "sqroll-test.db"
-    sqroll <- sqrollOpen tmpPath
-    return (tmpPath, sqroll)
+    pid    <- c_getpid
+    return $ tmpDir </> "sqroll-test-" ++ show pid ++ ".db"
+
+foreign import ccall "getpid" c_getpid :: IO Int
+
+withTmpSqroll :: (Sqroll -> IO a) -> IO a
+withTmpSqroll f = withTmpFile $ \filename -> bracket (sqrollOpen filename) sqrollClose f

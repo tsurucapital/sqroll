@@ -48,7 +48,7 @@ data Bid = Bid
 instance HasTable Bid
 
 testRunLog :: Assertion
-testRunLog = withTmpScroll $ \sqroll -> do
+testRunLog = withTmpSqroll $ \sqroll -> do
     cache <- newIORef []
 
     runLog sqroll cache
@@ -73,21 +73,28 @@ testRunLog = withTmpScroll $ \sqroll -> do
     cache' <- readIORef cache
     1 @=? length cache'
 
-    (generations, _) <- sqrollTailList sqroll (Key 0)
-    (map entityVal generations) @?=
+    generations <- sqrollTailList sqroll
+    generations @?=
         [ Generation 1 "testgen"
         , Generation 4 "alexgen"
         ]
 
-    (instruments, _) <- sqrollTailList sqroll (Key 0)
-    (map entityVal instruments) @?=
+    instruments <- sqrollTailList sqroll
+    instruments @?=
         [ Instrument "cookies"
         ]
 
-    (bids, _) <- sqrollTailList sqroll (Key 0)
-    (map entityVal bids) @?=
+    bids <- sqrollTailList sqroll
+    bids @?=
         [ Bid (Key 1) (Key 1) 10
         , Bid (Key 1) (Key 1) 12
         , Bid (Key 2) (Key 1) 20
         , Bid (Key 2) (Key 1) 22
         ]
+
+sqrollTailList :: HasTable a => Sqroll -> IO [a]
+sqrollTailList sqroll = do
+    stmt <- makeSelectStatement sqroll Nothing
+    vals <- sqrollGetList stmt
+    sqrollFinalize stmt
+    return vals
