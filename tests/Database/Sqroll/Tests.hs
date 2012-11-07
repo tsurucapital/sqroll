@@ -25,6 +25,10 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testTableIndexes"    testTableIndexes
     , testCase "testTableRefers"     testTableRefers
     , testCase "testSqrollByKey"     testSqrollByKey
+    , testCase "testSelectEntity"    testSelectEntity
+    , testCase "testSelectNext"      testSelectNext
+    , testCase "testFold"            testFold
+    , testCase "testFoldAll"         testFoldAll
     ]
 
 testAppendTailUsers :: Assertion
@@ -92,3 +96,41 @@ testAppendTail items = withTmpSqroll $ \sqroll -> do
     stmt <- makeSelectStatement sqroll Nothing
     items' <- sqrollGetList stmt
     items @=? items'
+
+testSelectEntity :: Assertion
+testSelectEntity = withTmpSqroll $ \sqroll -> do
+    let user = User "John" "Doe" 32 "kittens"
+    key <- sqrollAppend sqroll user
+    stmt <- sqrollSelectEntitiy `fmap` makeSelectStatement sqroll Nothing
+    (Entity userId userVal) <- sqrollGetOne stmt
+    key @=? userId
+    user @=? userVal
+
+testSelectNext :: Assertion
+testSelectNext = withTmpSqroll $ \sqroll -> do
+    let user1 = User "John" "Doe" 32 "kittens"
+        user2 = User "John2" "Doe" 32 "kittens"
+    sqrollAppend_ sqroll user1
+    sqrollAppend_ sqroll user2
+    stmt <- makeSelectStatement sqroll Nothing
+    sqrollSelectFromRowId stmt 2
+    user <- sqrollGetOne stmt
+    user2 @=? user
+
+testFoldAll :: Assertion
+testFoldAll = withTmpSqroll $ \sqroll -> do
+    let users = [User "John" "Doe" num "kittens" | num <- [1..10]]
+    mapM_ (sqrollAppend_ sqroll) users
+    stmt <- makeSelectStatement sqroll Nothing
+    r <- sqrollFoldAll (\s (User _ _ n _) -> return $ s + n) 0 stmt
+    sum [1..10] @=? r
+
+
+testFold :: Assertion
+testFold = withTmpSqroll $ \sqroll -> do
+    let users = [User "John" "Doe" num "kittens" | num <- [1..10]]
+        cond x = x < 5
+    mapM_ (sqrollAppend_ sqroll) users
+    stmt <- makeSelectStatement sqroll Nothing
+    r <- sqrollFold (\s (User _ _ n _) -> return (s + n, cond n)) 0 stmt
+    sum [1..5] @=? r
