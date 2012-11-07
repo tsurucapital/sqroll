@@ -46,8 +46,6 @@ testModifiedTypes = withTmpFile $ \tmpPath -> do
     stmt <- makeSelectStatement sqroll' (Just ModifiedTypes.defaultUser)
     user <- sqrollGetOne stmt
 
-    sqrollClose sqroll'
-
     -- Check that they are equal, defaults worked, everyone is happy, rainbows,
     -- unicorns etc.
     ModifiedTypes.User "John" "Doe" "m@jaspervdj.be" 32 @=? user

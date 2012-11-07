@@ -268,9 +268,11 @@ sqrollOpen :: FilePath -> IO Sqroll
 sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
-sqrollOpenWith filePath flags = Sqroll
-    <$> sqlOpen filePath flags <*> pure flags <*> newMVar ()
-    <*> newIORef HM.empty <*> newMVar []
+sqrollOpenWith filePath flags = do
+    s <- Sqroll <$> sqlOpen filePath flags <*> pure flags <*> newMVar ()
+                <*> newIORef HM.empty <*> newMVar []
+    addFinalizer s (sqrollClose s)
+    return s
 
 sqrollClose :: Sqroll -> IO ()
 sqrollClose sqroll = do
