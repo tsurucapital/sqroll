@@ -40,8 +40,8 @@ module Database.Sqroll.Internal
     ) where
 
 import Control.Applicative (pure, (<$>), (<*>))
-import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
-import Control.Monad (unless)
+import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar, modifyMVar, modifyMVar_, swapMVar)
+import Control.Monad (unless, when)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
@@ -50,6 +50,7 @@ import Data.Int (Int64)
 import GHC.Generics (Generic, Rep, from, to)
 import Unsafe.Coerce (unsafeCoerce)
 import System.IO.Unsafe (unsafeInterleaveIO)
+import System.Mem.Weak (addFinalizer)
 
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
@@ -139,7 +140,7 @@ makeSelectStatement sqroll defaultRecord = do
     stmt   <- sqlPrepare (sqrollSql sqroll) (tableSelect table'
                             ++ " WHERE rowid >= ? ORDER BY rowid")
     sqlBindInt64 stmt 1 0
-    return $ SStmt (stmt, mkSelectPeek table')
+    sqrollRegisterSStmt (stmt, mkSelectPeek table', sqroll)
 
 
 
@@ -153,7 +154,7 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
                             ++ " WHERE rowid >= ? AND " ++ c ++ " = ? ORDER BY rowid")
             sqlBindInt64 stmt 1 0
             sqlBindInt64 stmt 2 (unKey key)
-            return $ SStmt (stmt, mkSelectPeek table')
+            sqrollRegisterSStmt (stmt, mkSelectPeek table', sqroll)
         [] -> error' $ "Table " ++ tableName table' ++
             " does not refer to Table " ++ tableName foreignTable
         _ -> error' $ "There is more than one reference from " ++ tableName table' ++
@@ -165,22 +166,22 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
 -- | By default select statements return raw values.
 -- Use this to get Entires instead.
 sqrollSelectEntitiy :: HasTable a => SStmt a -> SStmt (Entity a)
-sqrollSelectEntitiy (SStmt (stmt, peek)) = -- {{{
+sqrollSelectEntitiy (SStmt (stmt, peek, sqroll)) = -- {{{
     let peek' s = do mVal <- peek s
                      case mVal of
                         Just entityVal -> do
                             entityKey <- Key <$> sqlGetRowId s
                             return $ Just Entity {..}
                         Nothing -> return Nothing
-    in (SStmt (stmt, peek'))-- }}}
+    in (SStmt (stmt, peek', sqroll))-- }}}
 
 -- | Start from given rowid other than the first one
 sqrollSelectFromRowId :: SStmt a -> Int64 -> IO ()
-sqrollSelectFromRowId (SStmt (stmt, _)) = sqlBindInt64 stmt 1
+sqrollSelectFromRowId (SStmt (stmt, _, _)) = sqlBindInt64 stmt 1
 
 -- | Get all available results from given statement as a one strict list
 sqrollGetList :: SStmt a -> IO [a]
-sqrollGetList (SStmt (stmt, peek)) = go-- {{{
+sqrollGetList (SStmt (stmt, peek, _)) = go-- {{{
     where
         go = do
             mPeekResult <- peek stmt
@@ -192,7 +193,7 @@ sqrollGetList (SStmt (stmt, peek)) = go-- {{{
 
 -- | Get all available results from given statement as a one lazy list
 sqrollGetLazyList :: SStmt a -> IO [a]
-sqrollGetLazyList (SStmt (stmt, peek)) = go-- {{{
+sqrollGetLazyList (SStmt (stmt, peek, _)) = go-- {{{
     where
         go = do
             mPeekResult <- peek stmt
@@ -204,7 +205,7 @@ sqrollGetLazyList (SStmt (stmt, peek)) = go-- {{{
 
 -- | Fold over all available results in given statement
 sqrollFoldAll :: (b -> a -> IO b) -> b -> SStmt a -> IO b
-sqrollFoldAll f initialValue (SStmt (stmt, peek)) = go initialValue-- {{{
+sqrollFoldAll f initialValue (SStmt (stmt, peek, _)) = go initialValue-- {{{
     where
         go b = do
             mPeekResult <- peek stmt
@@ -217,7 +218,7 @@ sqrollFoldAll f initialValue (SStmt (stmt, peek)) = go initialValue-- {{{
 -- | Fold over all available results in given statement with option to interrupt computation
 -- (return False as second element of the pair to interrupt)
 sqrollFold :: (b -> a -> IO (b, Bool)) -> b -> SStmt a -> IO b
-sqrollFold f initialValue (SStmt (stmt, peek)) = go initialValue-- {{{
+sqrollFold f initialValue (SStmt (stmt, peek, _)) = go initialValue-- {{{
     where
         go b = do
             mPeekResult <- peek stmt
@@ -231,7 +232,7 @@ sqrollFold f initialValue (SStmt (stmt, peek)) = go initialValue-- {{{
 
 -- | Get one value from the statement, will die with error in case of failure
 sqrollGetOne :: SStmt a -> IO a
-sqrollGetOne (SStmt (stmt, peek)) = do-- {{{
+sqrollGetOne (SStmt (stmt, peek, _)) = do-- {{{
     mPeekResult <- peek stmt
     case mPeekResult of
         Just a -> return a
@@ -239,7 +240,20 @@ sqrollGetOne (SStmt (stmt, peek)) = do-- {{{
 
 -- | Finalize statement. All statements must be finalized, do not use it.
 sqrollFinalize :: SStmt a -> IO ()
-sqrollFinalize (SStmt (stmt, _)) = sqlFinalize stmt
+sqrollFinalize (SStmt (stmt, _, sqroll)) = do
+        needs <- modifyMVar (sqrollStmts sqroll) needsFinalization
+        when needs $ sqlFinalize stmt
+    where
+        needsFinalization :: [SqlStmt] -> IO ([SqlStmt], Bool)
+        needsFinalization stmts = return (filter (/= stmt) stmts, elem stmt stmts)
+
+sqrollRegisterSStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) -> IO (SStmt a)
+sqrollRegisterSStmt s@(stmt, _, sqroll) = do
+    let s' = SStmt s
+    modifyMVar_ (sqrollStmts sqroll) (return . (stmt :))
+    addFinalizer s' (sqrollFinalize s')
+    return s'
+
 
 
 data Sqroll = Sqroll
@@ -247,6 +261,7 @@ data Sqroll = Sqroll
     , sqrollOpenFlags  :: [SqlOpenFlag]
     , sqrollLock       :: MVar ()
     , sqrollCache      :: IORef (HashMap String (SqrollCache ()))
+    , sqrollStmts      :: MVar [SqlStmt]
     }
 
 sqrollOpen :: FilePath -> IO Sqroll
@@ -255,12 +270,14 @@ sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
 sqrollOpenWith filePath flags = Sqroll
     <$> sqlOpen filePath flags <*> pure flags <*> newMVar ()
-    <*> newIORef HM.empty
+    <*> newIORef HM.empty <*> newMVar []
 
 sqrollClose :: Sqroll -> IO ()
 sqrollClose sqroll = do
         appenders <- HM.elems <$> readIORef (sqrollCache sqroll)
         mapM_ closeAppend appenders
+        stmts <- swapMVar (sqrollStmts sqroll) []
+        mapM_ sqlFinalize stmts
         sqlClose $ sqrollSql sqroll
     where
         closeAppend cache = do

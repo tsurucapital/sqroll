@@ -41,7 +41,6 @@ testModifiedTypes = withTmpFile $ \tmpPath -> do
     sqroll' <- sqrollOpen tmpPath
     stmt <- makeSelectStatement sqroll' (Just ModifiedTypes.defaultUser)
     user <- sqrollGetOne stmt
-    sqrollFinalize stmt
 
     sqrollClose sqroll'
 
@@ -83,7 +82,6 @@ testSqrollByKey = withTmpSqroll $ \sqroll -> do
 
     stmt <- makeSelectByKeyStatement sqroll Nothing key
     owner <- sqrollGetOne stmt
-    sqrollFinalize stmt
 
     DogOwner "Jasper" key @=? owner
 
@@ -93,5 +91,4 @@ testAppendTail items = withTmpSqroll $ \sqroll -> do
     mapM_ (sqrollAppend sqroll) items
     stmt <- makeSelectStatement sqroll Nothing
     items' <- sqrollGetList stmt
-    sqrollFinalize stmt
     items @=? items'
