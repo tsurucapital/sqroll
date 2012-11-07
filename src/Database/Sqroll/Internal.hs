@@ -45,7 +45,7 @@ import Control.Monad (unless, when)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
-import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Int (Int64)
 import GHC.Generics (Generic, Rep, from, to)
 import Unsafe.Coerce (unsafeCoerce)
@@ -74,10 +74,10 @@ newtype Key a = Key {unKey :: SqlRowId}
     deriving (Eq, Show, Enum, Ord)
 
 -- | Sql statement with insertion support
-newtype IStmt a = IStmt { unIStmt :: (SqlStmt, SqlStmt -> a -> IO ()) }
+newtype IStmt a = IStmt { _unIStmt :: (SqlStmt, SqlStmt -> a -> IO ()) }
 
 -- | Sql statement with peek support
-newtype SStmt a = SStmt { unSStmt :: (SqlStmt, SqlStmt -> IO (Maybe a)) }
+newtype SStmt a = SStmt { _unSStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) }
 
 
 data Entity a
@@ -333,7 +333,7 @@ sqrollAppend_ sqroll x = do
     cache <- sqrollGetCache sqroll
     cc@(IStmt (stmt, poker)) <- takeMVar (sqrollCacheInsert cache)
     poker stmt x
-    sqlStep stmt
+    _ <- sqlStep stmt
     sqlReset stmt
     putMVar (sqrollCacheInsert cache) cc
 {-# INLINE sqrollAppend_ #-}

@@ -4,11 +4,9 @@ module Database.Sqroll.Pure
     , runLog
     ) where
 
-import Control.Applicative ((<$>))
 import Data.IORef (IORef, readIORef, modifyIORef)
 
 import Database.Sqroll
-import Database.Sqroll.Sqlite3
 
 -- | Describes logging in a pure way
 data Log c where
