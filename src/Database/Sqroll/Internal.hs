@@ -13,6 +13,7 @@ module Database.Sqroll.Internal
 
     , Key (..)
     , Entity (..)
+    , Stmt (..)
 
     , Sqroll (sqrollSql)
     , sqrollOpen
@@ -74,10 +75,10 @@ newtype Key a = Key {unKey :: SqlRowId}
     deriving (Eq, Show, Enum, Ord)
 
 -- | Sql statement with insertion support
-newtype IStmt a = IStmt { _unIStmt :: (SqlStmt, SqlStmt -> a -> IO ()) }
+newtype IStmt a = IStmt (SqlStmt, SqlStmt -> a -> IO ())
 
 -- | Sql statement with peek support
-newtype SStmt a = SStmt { _unSStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) }
+newtype Stmt a = Stmt { unStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) }
 
 
 data Entity a
@@ -133,19 +134,24 @@ mkSelectPeek table' stmt = do
                     return Nothing
         return r
 
-
-makeSelectStatement :: HasTable a => Sqroll -> Maybe a -> IO (SStmt a)
+-- | Make a statement to select every item of the given type
+--
+-- You can pass a default value - its fields will be used to replace those
+-- missing from the database. If Nothing is passed instead missing fields will
+-- be derived automatically - most likely empty strings, 0 values and so on.
+makeSelectStatement :: HasTable a => Sqroll -> Maybe a -> IO (Stmt a)
 makeSelectStatement sqroll defaultRecord = do
     table' <- prepareTable sqroll defaultRecord
     stmt   <- sqlPrepare (sqrollSql sqroll) (tableSelect table'
                             ++ " WHERE rowid >= ? ORDER BY rowid")
     sqlBindInt64 stmt 1 0
-    sqrollRegisterSStmt (stmt, mkSelectPeek table', sqroll)
+    sqrollRegisterStmt (stmt, mkSelectPeek table', sqroll)
 
 
-
+-- | Make a statement to select every item of the given type taking
+-- only those where foreign key value matches to a given one.
 makeSelectByKeyStatement :: forall a b. (HasTable a, HasTable b)
-            => Sqroll -> Maybe a -> Key b -> IO (SStmt a)
+            => Sqroll -> Maybe a -> Key b -> IO (Stmt a)
 makeSelectByKeyStatement sqroll defaultRecord key = do
     table' <- prepareTable sqroll defaultRecord
     case tableRefers foreignTable table' of
@@ -154,7 +160,7 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
                             ++ " WHERE rowid >= ? AND " ++ c ++ " = ? ORDER BY rowid")
             sqlBindInt64 stmt 1 0
             sqlBindInt64 stmt 2 (unKey key)
-            sqrollRegisterSStmt (stmt, mkSelectPeek table', sqroll)
+            sqrollRegisterStmt (stmt, mkSelectPeek table', sqroll)
         [] -> error' $ "Table " ++ tableName table' ++
             " does not refer to Table " ++ tableName foreignTable
         _ -> error' $ "There is more than one reference from " ++ tableName table' ++
@@ -165,23 +171,23 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
 
 -- | By default select statements return raw values.
 -- Use this to get Entires instead.
-sqrollSelectEntitiy :: HasTable a => SStmt a -> SStmt (Entity a)
-sqrollSelectEntitiy (SStmt (stmt, peek, sqroll)) = -- {{{
+sqrollSelectEntitiy :: HasTable a => Stmt a -> Stmt (Entity a)
+sqrollSelectEntitiy (Stmt (stmt, peek, sqroll)) = -- {{{
     let peek' s = do mVal <- peek s
                      case mVal of
                         Just entityVal -> do
                             entityKey <- Key <$> sqlGetRowId s
                             return $ Just Entity {..}
                         Nothing -> return Nothing
-    in (SStmt (stmt, peek', sqroll))-- }}}
+    in (Stmt (stmt, peek', sqroll))-- }}}
 
 -- | Start from given rowid other than the first one
-sqrollSelectFromRowId :: SStmt a -> Int64 -> IO ()
-sqrollSelectFromRowId (SStmt (stmt, _, _)) = sqlBindInt64 stmt 1
+sqrollSelectFromRowId :: Stmt a -> Int64 -> IO ()
+sqrollSelectFromRowId (Stmt (stmt, _, _)) = sqlBindInt64 stmt 1
 
 -- | Get all available results from given statement as a one strict list
-sqrollGetList :: SStmt a -> IO [a]
-sqrollGetList (SStmt (stmt, peek, _)) = go-- {{{
+sqrollGetList :: Stmt a -> IO [a]
+sqrollGetList (Stmt (stmt, peek, _)) = go-- {{{
     where
         go = do
             mPeekResult <- peek stmt
@@ -192,8 +198,8 @@ sqrollGetList (SStmt (stmt, peek, _)) = go-- {{{
                 Nothing -> return []-- }}}
 
 -- | Get all available results from given statement as a one lazy list
-sqrollGetLazyList :: SStmt a -> IO [a]
-sqrollGetLazyList (SStmt (stmt, peek, _)) = go-- {{{
+sqrollGetLazyList :: Stmt a -> IO [a]
+sqrollGetLazyList (Stmt (stmt, peek, _)) = go-- {{{
     where
         go = do
             mPeekResult <- peek stmt
@@ -204,8 +210,8 @@ sqrollGetLazyList (SStmt (stmt, peek, _)) = go-- {{{
                 Nothing -> return []-- }}}
 
 -- | Fold over all available results in given statement
-sqrollFoldAll :: (b -> a -> IO b) -> b -> SStmt a -> IO b
-sqrollFoldAll f initialValue (SStmt (stmt, peek, _)) = go initialValue-- {{{
+sqrollFoldAll :: (b -> a -> IO b) -> b -> Stmt a -> IO b
+sqrollFoldAll f initialValue (Stmt (stmt, peek, _)) = go initialValue-- {{{
     where
         go b = do
             mPeekResult <- peek stmt
@@ -217,8 +223,8 @@ sqrollFoldAll f initialValue (SStmt (stmt, peek, _)) = go initialValue-- {{{
 
 -- | Fold over all available results in given statement with option to interrupt computation
 -- (return False as second element of the pair to interrupt)
-sqrollFold :: (b -> a -> IO (b, Bool)) -> b -> SStmt a -> IO b
-sqrollFold f initialValue (SStmt (stmt, peek, _)) = go initialValue-- {{{
+sqrollFold :: (b -> a -> IO (b, Bool)) -> b -> Stmt a -> IO b
+sqrollFold f initialValue (Stmt (stmt, peek, _)) = go initialValue-- {{{
     where
         go b = do
             mPeekResult <- peek stmt
@@ -231,25 +237,26 @@ sqrollFold f initialValue (SStmt (stmt, peek, _)) = go initialValue-- {{{
                 Nothing -> return b-- }}}
 
 -- | Get one value from the statement, will die with error in case of failure
-sqrollGetOne :: SStmt a -> IO a
-sqrollGetOne (SStmt (stmt, peek, _)) = do-- {{{
+sqrollGetOne :: Stmt a -> IO a
+sqrollGetOne (Stmt (stmt, peek, _)) = do-- {{{
     mPeekResult <- peek stmt
     case mPeekResult of
         Just a -> return a
         Nothing -> error "Expected to get at least one value in sqrollGetOne, but got none"-- }}}
 
--- | Finalize statement. All statements must be finalized, do not use it.
-sqrollFinalize :: SStmt a -> IO ()
-sqrollFinalize (SStmt (stmt, _, sqroll)) = do
+-- | Finalize statement. If not finalized manually statement will
+-- be finalized by GC
+sqrollFinalize :: Stmt a -> IO ()
+sqrollFinalize (Stmt (stmt, _, sqroll)) = do
         needs <- modifyMVar (sqrollStmts sqroll) needsFinalization
         when needs $ sqlFinalize stmt
     where
         needsFinalization :: [SqlStmt] -> IO ([SqlStmt], Bool)
         needsFinalization stmts = return (filter (/= stmt) stmts, elem stmt stmts)
 
-sqrollRegisterSStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) -> IO (SStmt a)
-sqrollRegisterSStmt s@(stmt, _, sqroll) = do
-    let s' = SStmt s
+sqrollRegisterStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) -> IO (Stmt a)
+sqrollRegisterStmt s@(stmt, _, sqroll) = do
+    let s' = Stmt s
     modifyMVar_ (sqrollStmts sqroll) (return . (stmt :))
     addFinalizer s' (sqrollFinalize s')
     return s'
@@ -264,9 +271,11 @@ data Sqroll = Sqroll
     , sqrollStmts      :: MVar [SqlStmt]
     }
 
+-- | Open sqroll log with sefault settings
 sqrollOpen :: FilePath -> IO Sqroll
 sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 
+-- | Open sqroll log with custom settings
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
 sqrollOpenWith filePath flags = do
     s <- Sqroll <$> sqlOpen filePath flags <*> pure flags <*> newMVar ()
@@ -274,6 +283,7 @@ sqrollOpenWith filePath flags = do
     addFinalizer s (sqrollClose s)
     return s
 
+-- | Close sqroll log. All running statements will be finalized automatically
 sqrollClose :: Sqroll -> IO ()
 sqrollClose sqroll = do
         appenders <- HM.elems <$> readIORef (sqrollCache sqroll)
@@ -286,6 +296,9 @@ sqrollClose sqroll = do
             (IStmt (stmt, _)) <- takeMVar (sqrollCacheInsert cache)
             sqlFinalize stmt
 
+-- | Move all the data from WAL file to the main db file. Checkpoint
+-- will be performed automatically when database closed.
+-- Doing checkpoints manually might make logging performance more predictable.
 sqrollCheckpoint :: Sqroll -> IO ()
 sqrollCheckpoint = sqlCheckpoint . sqrollSql
 
@@ -306,6 +319,7 @@ sqrollGetCache sqroll = do
     table' = table :: NamedTable a
     name   = tableName table'
 
+-- | Perform set of logging actions inside sqlite transaction
 sqrollTransaction :: MonadIO m => Sqroll -> m a -> m a
 sqrollTransaction sqroll f = do
     () <- liftIO $ takeMVar (sqrollLock sqroll)
