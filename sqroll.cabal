@@ -35,7 +35,8 @@ Library
     mtl                  >= 2.0 && < 2.2,
     old-locale           >= 1.0 && < 1.1,
     time                 >= 1.4 && < 1.5,
-    unordered-containers >= 0.2 && < 0.3
+    unordered-containers >= 0.2 && < 0.3,
+    text                 >= 0.11 && < 0.12
 
  Pkgconfig-depends:
    sqlite3
@@ -68,7 +69,8 @@ Test-suite sqroll-tests
     mtl                  >= 2.0 && < 2.2,
     old-locale           >= 1.0 && < 1.1,
     time                 >= 1.4 && < 1.5,
-    unordered-containers >= 0.2 && < 0.3
+    unordered-containers >= 0.2 && < 0.3,
+    text                 >= 0.11 && < 0.12
 
   -- Pkgconfig-depends doesn't seem to work for test suites?
   Extra-libraries:

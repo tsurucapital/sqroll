@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Database.Sqroll.Tests.Types
     ( User (..)
     , testUsers
@@ -20,14 +22,16 @@ module Database.Sqroll.Tests.Types
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.Text (Text)
+import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 import Database.Sqroll (HasTable (..), Key, aliasTable)
 import Database.Sqroll.Table.Field (Field)
 
 data User = User
-    { userFirstName :: String
-    , userLastName  :: String
+    { userFirstName :: Text
+    , userLastName  :: Text
     , userAge       :: Int
     , userPassword  :: ByteString
     } deriving (Eq, Generic, Show)
@@ -38,10 +42,10 @@ testUsers :: [User]
 testUsers = map mkUser [0 .. 10]
   where
     mkUser i = User
-        ("John" ++ show i) ("Doe" ++ show i) i (B.pack [0 .. fromIntegral i])
+        (T.pack $ "John" ++ show i) (T.pack $ "Doe" ++ show i) i (B.pack [0 .. fromIntegral i])
 
 data Kitten = Kitten
-    { kittenWoof :: Maybe String
+    { kittenWoof :: Maybe Text
     } deriving (Eq, Generic, Show)
 
 instance HasTable Kitten
@@ -51,21 +55,22 @@ testKittens = [Kitten Nothing, Kitten (Just "Woof")]
 
 data FooBar = FooBar
     { -- Uses the Beamable instance...
-      fooBarList :: [Either String Int]
+      fooBarList :: Either String Int
     } deriving (Eq, Generic, Show)
 
-instance Field [Either String Int]
+instance Field (Either String Int) where
+    fieldDefault = (Left "")
 
 instance HasTable FooBar
 
 testFooBars :: [FooBar]
-testFooBars = [FooBar [Left "NANANANANANA", Right 3, Left "sup"]]
+testFooBars = [FooBar (Left "NANANANANANA"), FooBar (Right 3), FooBar (Left "sup")]
 
 data HasTuple = HasTuple
-    { hasTupleFoo :: (Int, String)
-    , hasTupleBar :: ((String, Int), Bool)
-    , hasTupleQux :: (String, Int, Bool)
-    , hasTupleWuu :: (String, Int, Bool, String)
+    { hasTupleFoo :: (Int, Text)
+    , hasTupleBar :: ((Text, Int), Bool)
+    , hasTupleQux :: (Text, Int, Bool)
+    , hasTupleWuu :: (Text, Int, Bool, Text)
     , hasTuple7 :: (Int, Int, Int, Int, Int, Int, Int)
     } deriving (Eq, Generic, Show)
 

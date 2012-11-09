@@ -1,9 +1,12 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Database.Sqroll.Pure.Tests
     ( tests
     ) where
 
 import Data.IORef (newIORef, readIORef)
+import Data.Text (Text)
 import GHC.Generics (Generic)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
@@ -20,13 +23,13 @@ tests = testGroup "Database.Sqroll.Tests"
 
 data Generation = Generation
     { _generationNo     :: Int
-    , _generationOrigin :: String
+    , _generationOrigin :: Text
     } deriving (Eq, Generic, Show)
 
 instance HasTable Generation
 
 newtype Instrument = Instrument
-    { _instrumentDescription :: String
+    { _instrumentDescription :: Text
     } deriving (Eq, Generic, Show)
 
 instance HasTable Instrument

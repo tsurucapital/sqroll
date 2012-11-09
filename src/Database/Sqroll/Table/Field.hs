@@ -1,6 +1,8 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Database.Sqroll.Table.Field
     ( Field (..)
     , fieldIndexed
@@ -11,6 +13,8 @@ import Data.Beamable (Beamable, decode, encode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Monoid (Monoid, mempty)
 import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
 import Data.Int (Int64)
@@ -60,6 +64,16 @@ instance Field Bool where
     {-# INLINE fieldPoke #-}
 
     fieldPeek stmt n = fmap (/= 0) (sqlColumnInt64 stmt n)
+    {-# INLINE fieldPeek #-}
+
+instance Field T.Text where
+    fieldTypes   = const [SqlText]
+    fieldDefault = ""
+
+    fieldPoke s n v = sqlBindByteString s n (T.encodeUtf8 v)
+    {-# INLINE fieldPoke #-}
+
+    fieldPeek s n = T.decodeUtf8 `fmap` sqlColumnByteString s n
     {-# INLINE fieldPeek #-}
 
 instance Field Int64 where
