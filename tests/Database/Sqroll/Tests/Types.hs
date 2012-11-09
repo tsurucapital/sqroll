@@ -18,6 +18,9 @@ module Database.Sqroll.Tests.Types
 
     , Dog (..)
     , DogOwner (..)
+
+    , Sandwich (..)
+    , SandwichComponent (..)
     ) where
 
 import Data.ByteString (ByteString)
@@ -27,7 +30,7 @@ import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 import Database.Sqroll (HasTable (..), Key, aliasTable)
-import Database.Sqroll.Table.Field (Field)
+import Database.Sqroll.Table.Field (Field (..))
 
 data User = User
     { userFirstName :: Text
@@ -87,8 +90,22 @@ instance HasTable Dog where
     table = aliasTable "dog" Dog unDog
 
 data DogOwner = DogOwner
-    { dogOwnerName :: String
+    { dogOwnerName :: Text
     , dogOwnerDog  :: Key Dog
     } deriving (Eq, Generic, Show)
 
 instance HasTable DogOwner
+
+data Sandwich = Sandwich
+    { sandwichSize :: Text
+    , sandwichOperation :: Text
+    , sandwichComponents :: [SandwichComponent]
+    } deriving (Eq, Generic, Show)
+
+instance HasTable Sandwich
+
+data SandwichComponent = SandwichComponent
+    { sandwichComponentName :: Text
+    , sandwichComponentQty  :: Int
+    } deriving (Eq, Generic, Show)
+instance HasTable SandwichComponent

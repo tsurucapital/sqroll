@@ -5,8 +5,9 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 module Database.Sqroll.Table
     ( -- * Types
-      Table
+      Table (..)
     , NamedTable (..)
+    , FieldInfo (..)
 
       -- * Creating tables
     , namedTable

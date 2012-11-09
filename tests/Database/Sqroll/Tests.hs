@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
+
 module Database.Sqroll.Tests
     ( tests
     ) where
@@ -29,6 +31,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testSelectNext"      testSelectNext
     , testCase "testFold"            testFold
     , testCase "testFoldAll"         testFoldAll
+    , testCase "testListFields"      testListFields
     ]
 
 testAppendTailUsers :: Assertion
@@ -132,3 +135,25 @@ testFold = withTmpSqroll $ \sqroll -> do
     stmt <- makeSelectStatement sqroll Nothing
     r <- sqrollFold (\s (User _ _ n _) -> return (s + n, cond n)) 0 stmt
     sum [1..5] @=? r
+
+testListFields :: Assertion
+testListFields = withTmpSqroll $ \sqroll -> do
+    let bacons = [ SandwichComponent "Bacon" 10
+                 , SandwichComponent "Moar bacon!" 100
+                 , SandwichComponent "Lots of bacon!!!!" 1000
+                 , SandwichComponent "Tiny bun" 1
+                 , SandwichComponent "Bacon wraps" 100000
+                 ]
+        sandwich = Sandwich "Big" "Omnomnomnom" bacons
+
+    _key <- sqrollAppend sqroll sandwich
+    key <- sqrollAppend sqroll sandwich
+    mapM_ (sqrollAppend_ sqroll) (map (key,) (sandwichComponents sandwich))
+
+    stmt1 <- sqrollSelectEntitiy `fmap` makeSelectStatement sqroll Nothing
+    (Entity key' sandwich') <- last `fmap` sqrollGetList stmt1
+    stmt2 <- makeSelectByKeyStatement sqroll Nothing key'
+    bacons' <- sqrollGetList stmt2
+    let sandwich'' = sandwich' { sandwichComponents = map snd (bacons' :: [(Key Sandwich, SandwichComponent)]) }
+
+    sandwich @=? sandwich''

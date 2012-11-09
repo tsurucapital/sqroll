@@ -4,6 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS -fno-warn-orphans #-}
 
 module Database.Sqroll.Internal
     ( NamedTable (..)
@@ -63,6 +65,27 @@ class HasTable t where
 
     default table :: (Generic t, GNamedTable (Rep t)) => NamedTable t
     table = gNamedTable to from
+
+
+instance (HasTable a, HasTable b) => HasTable (Key a, b) where
+    table = let (NamedTable name_a _)   = table :: NamedTable a
+                (NamedTable name_b tbl) = table :: NamedTable b
+                name = name_b ++ "__of__" ++ name_a
+                key = Primitive $ FieldInfo (name_a ++ "__id") fst
+
+            in NamedTable name ((,) <$> key <*> rebuild tbl)
+                where
+                    rebuild :: Table b x -> Table (Key a, b) x
+                    rebuild (Primitive (FieldInfo n a)) = Primitive (FieldInfo n (a . snd))
+                    rebuild (Map f t) = Map f (rebuild t)
+                    rebuild (Pure a) = Pure a
+                    rebuild (App f t) = App (rebuild f) (rebuild t)
+
+instance HasTable a => Field [a] where
+    fieldTypes   = const []
+    fieldDefault = []
+    fieldPoke _ _ _ = return ()
+    fieldPeek _ _ = return []
 
 -- | Useful for creating tables for newtypes
 aliasTable :: HasTable t => String -> (t -> u) -> (u -> t) -> NamedTable u
