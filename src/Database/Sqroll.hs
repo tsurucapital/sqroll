@@ -2,6 +2,7 @@ module Database.Sqroll
     ( NamedTable (..)
 
     , HasTable (..)
+    , HString (..)
     , aliasTable
 
     , Key (..)
@@ -33,3 +34,4 @@ module Database.Sqroll
     ) where
 
 import Database.Sqroll.Internal
+import Database.Sqroll.Table.Field (HString (..))

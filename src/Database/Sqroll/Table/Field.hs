@@ -6,6 +6,7 @@
 module Database.Sqroll.Table.Field
     ( Field (..)
     , fieldIndexed
+    , HString (..)
     ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -86,14 +87,17 @@ instance Field Int64 where
     fieldPeek = sqlColumnInt64
     {-# INLINE fieldPeek #-}
 
-instance Field String where
-    fieldTypes   = const [SqlText]
-    fieldDefault = ""
+-- | Newtype wrap around plain haskell string to avoid overlapping instances with lists
+newtype HString = HString { unHString :: String } deriving (Eq, Show, Ord)
 
-    fieldPoke = sqlBindString
+instance Field HString where
+    fieldTypes   = const [SqlText]
+    fieldDefault = HString ""
+
+    fieldPoke s n v = sqlBindString s n (unHString v)
     {-# INLINE fieldPoke #-}
 
-    fieldPeek = sqlColumnString
+    fieldPeek s n = HString `fmap` sqlColumnString s n
     {-# INLINE fieldPeek #-}
 
 instance Field Double where
