@@ -18,7 +18,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TL
-import Data.Monoid (Monoid, mempty)
 import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
 import Data.Int (Int64)
 import System.Locale (defaultTimeLocale)
@@ -38,9 +37,6 @@ class Field a where
 
     default fieldRefers :: a -> [String]
     fieldRefers = const []
-
-    default fieldDefault :: Monoid a => a
-    fieldDefault = mempty
 
     default fieldPoke :: Beamable a => SqlStmt -> Int -> a -> IO ()
     fieldPoke stmt n x = sqlBindByteString stmt n (encode x)
