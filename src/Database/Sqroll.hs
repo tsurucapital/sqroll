@@ -23,7 +23,7 @@ module Database.Sqroll
     , makeSelectStatement
     , makeSelectByKeyStatement
 
-    , sqrollSelectEntitiy
+    , sqrollSelectEntity
     , sqrollSelectFromRowId
 
     , sqrollGetList

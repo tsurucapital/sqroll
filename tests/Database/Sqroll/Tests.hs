@@ -102,7 +102,7 @@ testSelectEntity :: Assertion
 testSelectEntity = withTmpSqroll $ \sqroll -> do
     let user = User "John" "Doe" 32 "kittens"
     key <- sqrollAppend sqroll user
-    stmt <- sqrollSelectEntitiy `fmap` makeSelectStatement sqroll Nothing
+    stmt <- sqrollSelectEntity `fmap` makeSelectStatement sqroll Nothing
     (Entity userId userVal) <- sqrollGetOne stmt
     key @=? userId
     user @=? userVal
@@ -150,7 +150,7 @@ testListFields = withTmpSqroll $ \sqroll -> do
     key <- sqrollAppend sqroll sandwich
     mapM_ (sqrollAppend_ sqroll) (map (key,) (sandwichComponents sandwich))
 
-    stmt1 <- sqrollSelectEntitiy `fmap` makeSelectStatement sqroll Nothing
+    stmt1 <- sqrollSelectEntity `fmap` makeSelectStatement sqroll Nothing
     (Entity key' sandwich') <- last `fmap` sqrollGetList stmt1
     stmt2 <- makeSelectByKeyStatement sqroll Nothing key'
     bacons' <- sqrollGetList stmt2

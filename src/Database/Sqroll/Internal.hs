@@ -32,7 +32,7 @@ module Database.Sqroll.Internal
     , makeSelectStatement
     , makeSelectByKeyStatement
 
-    , sqrollSelectEntitiy
+    , sqrollSelectEntity
     , sqrollSelectFromRowId
 
     , sqrollGetList
@@ -194,8 +194,8 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
 
 -- | By default select statements return raw values.
 -- Use this to get Entires instead.
-sqrollSelectEntitiy :: HasTable a => Stmt a -> Stmt (Entity a)
-sqrollSelectEntitiy (Stmt (stmt, peek, sqroll)) = -- {{{
+sqrollSelectEntity :: HasTable a => Stmt a -> Stmt (Entity a)
+sqrollSelectEntity (Stmt (stmt, peek, sqroll)) = -- {{{
     let peek' s = do mVal <- peek s
                      case mVal of
                         Just entityVal -> do
