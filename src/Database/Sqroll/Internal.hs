@@ -40,6 +40,7 @@ module Database.Sqroll.Internal
     , sqrollFold
     , sqrollFoldAll
     , sqrollGetOne
+    , sqrollGetMaybe
     ) where
 
 import Control.Applicative (pure, (<$>), (<*>))
@@ -266,6 +267,10 @@ sqrollGetOne (Stmt (stmt, peek)) = do-- {{{
     case mPeekResult of
         Just a -> return a
         Nothing -> error "Expected to get at least one value in sqrollGetOne, but got none"-- }}}
+
+-- | Get one value if it's available
+sqrollGetMaybe :: Stmt a -> IO (Maybe a)
+sqrollGetMaybe (Stmt (stmt, peek)) = peek stmt
 
 -- | Finalize statement. If not finalized manually statement will
 -- be finalized by GC
