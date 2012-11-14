@@ -17,12 +17,14 @@ module Database.Sqroll.Sqlite3
 
     , sqlPrepare
     , sqlFinalize
+    , sqlSafeFinalize
     , sqlStep
     , sqlStepAll
     , sqlStepList
     , sqlStep_
     , sqlReset
     , sqlExecute
+    , sqlAllStatements
 
     , sqlBindInt64
     , sqlBindDouble
@@ -195,6 +197,34 @@ sqlReset stmt = sqlite3_reset stmt >>= orDie "sqlite3_reset"
 sqlExecute :: Sql -> String -> IO ()
 sqlExecute db str = bracket (sqlPrepare db str) sqlFinalize sqlStep >> return ()
 {-# INLINE sqlExecute #-}
+
+
+foreign import ccall "sqlite3.h sqlite3_next_stmt" sqlite3_next_stmt
+    :: Sql -> SqlStmt -> IO SqlStmt
+
+-- | fetch all available prepared sqlite statements
+sqlAllStatements :: Sql -> IO [SqlStmt]
+sqlAllStatements db = allStmtsR [] nullPtr
+    where
+        allStmtsR :: [SqlStmt] -> SqlStmt -> IO [SqlStmt]
+        allStmtsR acc prev = do
+            newStmt <- sqlite3_next_stmt db prev
+            if newStmt == nullPtr
+                then return acc
+                else allStmtsR (newStmt : acc) newStmt
+
+-- | finalize statement making sure that it was not finalized before
+sqlSafeFinalize :: Sql -> SqlStmt -> IO ()
+sqlSafeFinalize db targetStmt = safeFinR nullPtr
+    where
+        safeFinR :: SqlStmt -> IO ()
+        safeFinR prev = do
+            newStmt <- sqlite3_next_stmt db prev
+            case () of
+                _ | newStmt == targetStmt -> sqlFinalize targetStmt
+                  | newStmt == nullPtr -> return ()
+                  | otherwise -> safeFinR newStmt
+
 
 foreign import ccall "sqlite3.h sqlite3_last_insert_rowid"
     sqlite3_last_insert_rowid
