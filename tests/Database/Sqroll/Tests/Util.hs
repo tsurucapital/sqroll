@@ -3,6 +3,7 @@
 module Database.Sqroll.Tests.Util
     ( withTmpFile
     , withTmpSqroll
+    , withTmpFileSqroll
     ) where
 
 import Control.Exception (bracket)
@@ -23,5 +24,9 @@ getTmpFile = do
 
 foreign import ccall "getpid" c_getpid :: IO Int
 
+withTmpFileSqroll :: (Sqroll -> IO a) -> IO a
+withTmpFileSqroll f = withTmpFile $ \filename -> bracket (sqrollOpen filename) sqrollClose f
+
+
 withTmpSqroll :: (Sqroll -> IO a) -> IO a
-withTmpSqroll f = withTmpFile $ \filename -> bracket (sqrollOpen filename) sqrollClose f
+withTmpSqroll f = bracket (sqrollOpen ":memory:") sqrollClose f
