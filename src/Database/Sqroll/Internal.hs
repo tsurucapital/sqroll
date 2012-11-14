@@ -101,7 +101,7 @@ newtype Key a = Key {unKey :: SqlRowId}
 newtype IStmt a = IStmt (SqlStmt, SqlStmt -> a -> IO ())
 
 -- | Sql statement with peek support
-newtype Stmt a = Stmt { unStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) }
+newtype Stmt a = Stmt { unStmt :: (SqlStmt, SqlStmt -> IO (Maybe a)) }
 
 
 data Entity a
@@ -168,7 +168,7 @@ makeSelectStatement sqroll defaultRecord = do
     stmt   <- sqlPrepare (sqrollSql sqroll) (tableSelect table'
                             ++ " WHERE rowid >= ? ORDER BY rowid")
     sqlBindInt64 stmt 1 0
-    sqrollRegisterStmt (stmt, mkSelectPeek table', sqroll)
+    sqrollRegisterStmt sqroll (stmt, mkSelectPeek table')
 
 
 -- | Make a statement to select every item of the given type taking
@@ -183,7 +183,7 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
                             ++ " WHERE rowid >= ? AND " ++ c ++ " = ? ORDER BY rowid")
             sqlBindInt64 stmt 1 0
             sqlBindInt64 stmt 2 (unKey key)
-            sqrollRegisterStmt (stmt, mkSelectPeek table', sqroll)
+            sqrollRegisterStmt sqroll (stmt, mkSelectPeek table')
         [] -> error' $ "Table " ++ tableName table' ++
             " does not refer to Table " ++ tableName foreignTable
         _ -> error' $ "There is more than one reference from " ++ tableName table' ++
@@ -195,22 +195,22 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
 -- | By default select statements return raw values.
 -- Use this to get Entires instead.
 sqrollSelectEntity :: HasTable a => Stmt a -> Stmt (Entity a)
-sqrollSelectEntity (Stmt (stmt, peek, sqroll)) = -- {{{
+sqrollSelectEntity (Stmt (stmt, peek)) = -- {{{
     let peek' s = do mVal <- peek s
                      case mVal of
                         Just entityVal -> do
                             entityKey <- Key <$> sqlGetRowId s
                             return $ Just Entity {..}
                         Nothing -> return Nothing
-    in (Stmt (stmt, peek', sqroll))-- }}}
+    in (Stmt (stmt, peek'))-- }}}
 
 -- | Start from given rowid other than the first one
 sqrollSelectFromRowId :: Stmt a -> Int64 -> IO ()
-sqrollSelectFromRowId (Stmt (stmt, _, _)) = sqlBindInt64 stmt 1
+sqrollSelectFromRowId (Stmt (stmt, _)) = sqlBindInt64 stmt 1
 
 -- | Get all available results from given statement as a one strict list
 sqrollGetList :: Stmt a -> IO [a]
-sqrollGetList (Stmt (stmt, peek, _)) = go-- {{{
+sqrollGetList (Stmt (stmt, peek)) = go-- {{{
     where
         go = do
             mPeekResult <- peek stmt
@@ -222,7 +222,7 @@ sqrollGetList (Stmt (stmt, peek, _)) = go-- {{{
 
 -- | Get all available results from given statement as a one lazy list
 sqrollGetLazyList :: Stmt a -> IO [a]
-sqrollGetLazyList (Stmt (stmt, peek, _)) = go-- {{{
+sqrollGetLazyList (Stmt (stmt, peek)) = go-- {{{
     where
         go = do
             mPeekResult <- peek stmt
@@ -234,7 +234,7 @@ sqrollGetLazyList (Stmt (stmt, peek, _)) = go-- {{{
 
 -- | Fold over all available results in given statement
 sqrollFoldAll :: (b -> a -> IO b) -> b -> Stmt a -> IO b
-sqrollFoldAll f initialValue (Stmt (stmt, peek, _)) = go initialValue-- {{{
+sqrollFoldAll f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
     where
         go b = do
             mPeekResult <- peek stmt
@@ -247,7 +247,7 @@ sqrollFoldAll f initialValue (Stmt (stmt, peek, _)) = go initialValue-- {{{
 -- | Fold over all available results in given statement with option to interrupt computation
 -- (return False as second element of the pair to interrupt)
 sqrollFold :: (b -> a -> IO (b, Bool)) -> b -> Stmt a -> IO b
-sqrollFold f initialValue (Stmt (stmt, peek, _)) = go initialValue-- {{{
+sqrollFold f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
     where
         go b = do
             mPeekResult <- peek stmt
@@ -261,7 +261,7 @@ sqrollFold f initialValue (Stmt (stmt, peek, _)) = go initialValue-- {{{
 
 -- | Get one value from the statement, will die with error in case of failure
 sqrollGetOne :: Stmt a -> IO a
-sqrollGetOne (Stmt (stmt, peek, _)) = do-- {{{
+sqrollGetOne (Stmt (stmt, peek)) = do-- {{{
     mPeekResult <- peek stmt
     case mPeekResult of
         Just a -> return a
@@ -269,11 +269,11 @@ sqrollGetOne (Stmt (stmt, peek, _)) = do-- {{{
 
 -- | Finalize statement. If not finalized manually statement will
 -- be finalized by GC
-sqrollFinalize :: Stmt a -> IO ()
-sqrollFinalize (Stmt (stmt, _, sqroll)) = sqlSafeFinalize (sqrollSql sqroll) stmt
+sqrollFinalize :: Sqroll -> Stmt a -> IO ()
+sqrollFinalize sqroll (Stmt (stmt, _)) = sqlSafeFinalize (sqrollSql sqroll) stmt
 
-sqrollRegisterStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) -> IO (Stmt a)
-sqrollRegisterStmt s@(stmt, _, sqroll) = do
+sqrollRegisterStmt :: Sqroll -> (SqlStmt, SqlStmt -> IO (Maybe a)) -> IO (Stmt a)
+sqrollRegisterStmt sqroll s@(stmt, _) = do
     addFinalizer stmt (sqlSafeFinalize (sqrollSql sqroll) stmt)
     return $ Stmt s
 
