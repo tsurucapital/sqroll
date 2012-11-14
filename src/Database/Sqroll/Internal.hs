@@ -43,8 +43,8 @@ module Database.Sqroll.Internal
     ) where
 
 import Control.Applicative (pure, (<$>), (<*>))
-import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar, modifyMVar, modifyMVar_, swapMVar)
-import Control.Monad (unless, when)
+import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
+import Control.Monad (unless)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
@@ -270,19 +270,12 @@ sqrollGetOne (Stmt (stmt, peek, _)) = do-- {{{
 -- | Finalize statement. If not finalized manually statement will
 -- be finalized by GC
 sqrollFinalize :: Stmt a -> IO ()
-sqrollFinalize (Stmt (stmt, _, sqroll)) = do
-        needs <- modifyMVar (sqrollStmts sqroll) needsFinalization
-        when needs $ sqlFinalize stmt
-    where
-        needsFinalization :: [SqlStmt] -> IO ([SqlStmt], Bool)
-        needsFinalization stmts = return (filter (/= stmt) stmts, elem stmt stmts)
+sqrollFinalize (Stmt (stmt, _, sqroll)) = sqlSafeFinalize (sqrollSql sqroll) stmt
 
 sqrollRegisterStmt :: (SqlStmt, SqlStmt -> IO (Maybe a), Sqroll) -> IO (Stmt a)
 sqrollRegisterStmt s@(stmt, _, sqroll) = do
-    let s' = Stmt s
-    modifyMVar_ (sqrollStmts sqroll) (return . (stmt :))
-    addFinalizer s' (sqrollFinalize s')
-    return s'
+    addFinalizer stmt (sqlSafeFinalize (sqrollSql sqroll) stmt)
+    return $ Stmt s
 
 
 
@@ -291,7 +284,6 @@ data Sqroll = Sqroll
     , sqrollOpenFlags  :: [SqlOpenFlag]
     , sqrollLock       :: MVar ()
     , sqrollCache      :: IORef (HashMap String (SqrollCache ()))
-    , sqrollStmts      :: MVar [SqlStmt]
     }
 
 -- | Open sqroll log with sefault settings
@@ -302,8 +294,7 @@ sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
 sqrollOpenWith filePath flags = do
     s <- Sqroll <$> sqlOpen filePath flags <*> pure flags <*> newMVar ()
-                <*> newIORef HM.empty <*> newMVar []
-    addFinalizer s (sqrollClose s)
+                <*> newIORef HM.empty
     return s
 
 -- | Close sqroll log. All running statements will be finalized automatically
@@ -311,8 +302,8 @@ sqrollClose :: Sqroll -> IO ()
 sqrollClose sqroll = do
         appenders <- HM.elems <$> readIORef (sqrollCache sqroll)
         mapM_ closeAppend appenders
-        stmts <- swapMVar (sqrollStmts sqroll) []
-        mapM_ sqlFinalize stmts
+        stmts <- sqlAllStatements (sqrollSql sqroll)
+        mapM_ (sqlSafeFinalize $ sqrollSql sqroll) stmts
         sqlClose $ sqrollSql sqroll
     where
         closeAppend cache = do
