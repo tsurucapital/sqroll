@@ -31,6 +31,7 @@ module Database.Sqroll
     , sqrollFold
     , sqrollFoldAll
     , sqrollGetOne
+    , sqrollGetMaybe
     ) where
 
 import Database.Sqroll.Internal
