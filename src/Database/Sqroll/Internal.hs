@@ -208,12 +208,12 @@ sqrollSelectEntity (Stmt (stmt, peek)) = -- {{{
 
 -- | Start from given rowid other than the first one
 sqrollSelectFromRowId :: Stmt a -> Int64 -> IO ()
-sqrollSelectFromRowId (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlBindInt64 raw 1 i
+sqrollSelectFromRowId (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlReset raw >> sqlBindInt64 raw 1 i
 
 -- | Bind a new value for the foreign key specified in this statement, will probably fail
 -- if executed on a statement not bounded by foreign key
 sqrollRebindKey :: Stmt a -> Int64 -> IO ()
-sqrollRebindKey (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlBindInt64 raw 2 i
+sqrollRebindKey (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlReset raw >> sqlBindInt64 raw 2 i
 
 -- | Get all available results from given statement as a one strict list
 sqrollGetList :: Stmt a -> IO [a]
