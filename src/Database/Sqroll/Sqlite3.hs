@@ -118,7 +118,7 @@ sqlOpenFlagCode SqlOpenReadWrite = 0x00000002
 sqlOpenFlagCode SqlOpenCreate    = 0x00000004
 sqlOpenFlagCode SqlOpenWal       = 0x00000000
 
-foreign import ccall "sqlite3.h sqlite3_open_v2" sqlite3_open_v2
+foreign import ccall unsafe "sqlite3.h sqlite3_open_v2" sqlite3_open_v2
     :: CString -> Ptr Sql -> CInt -> CString -> IO SqlStatus
 
 sqlOpen :: FilePath -> [SqlOpenFlag] -> IO Sql
@@ -135,7 +135,7 @@ sqlOpen fp flags = do
     flag = foldl' (.|.) 0 $ map sqlOpenFlagCode flags
 {-# INLINE sqlOpen #-}
 
-foreign import ccall "sqlite3.h sqlite3_close" sqlite3_close
+foreign import ccall unsafe "sqlite3.h sqlite3_close" sqlite3_close
     :: Sql -> IO SqlStatus
 
 sqlClose :: Sql -> IO ()
@@ -161,7 +161,7 @@ sqlCheckpoint :: Sql -> IO ()
 sqlCheckpoint db = sqlite3_wal_checkpoint_v2 db nullPtr (sqliteCheckpoint Full) nullPtr nullPtr
         >>= orDie "sqlite3_wal_checkpoint_v2"
 
-foreign import ccall "sqlite3.h sqlite3_step" sqlite3_step
+foreign import ccall unsafe "sqlite3.h sqlite3_step" sqlite3_step
     :: SqlStmt -> IO SqlStatus
 
 sqlStep :: SqlStmt -> IO Bool
@@ -193,7 +193,7 @@ sqlStep_ :: SqlStmt -> IO ()
 sqlStep_ stmt = sqlStep stmt >> return ()
 {-# INLINE sqlStep_ #-}
 
-foreign import ccall "sqlite3.h sqlite3_reset" sqlite3_reset
+foreign import ccall unsafe "sqlite3.h sqlite3_reset" sqlite3_reset
     :: SqlStmt -> IO SqlStatus
 
 sqlReset :: SqlStmt -> IO ()
@@ -205,7 +205,7 @@ sqlExecute db str = sqlPrepare db str >>= \stmt -> withForeignPtr stmt sqlStep_
 {-# INLINE sqlExecute #-}
 
 
-foreign import ccall "sqlite3.h sqlite3_next_stmt" sqlite3_next_stmt
+foreign import ccall unsafe "sqlite3.h sqlite3_next_stmt" sqlite3_next_stmt
     :: Sql -> SqlStmt -> IO SqlStmt
 
 -- | fetch all available prepared sqlite statements
@@ -223,7 +223,7 @@ foreign import ccall "sqlite3.h sqlite3_last_insert_rowid"
     sqlite3_last_insert_rowid
     :: Sql -> IO CLLong
 
-foreign import ccall "sqlite3.h sqlite3_bind_int64" sqlite3_bind_int64
+foreign import ccall unsafe "sqlite3.h sqlite3_bind_int64" sqlite3_bind_int64
     :: SqlStmt -> CInt -> CLLong -> IO SqlStatus
 
 sqlBindInt64 :: SqlStmt -> Int -> Int64 -> IO ()
@@ -232,7 +232,7 @@ sqlBindInt64 stmt n x =
         orDie "sqlite3_bind_int64"
 {-# INLINE sqlBindInt64 #-}
 
-foreign import ccall "sqlite3.h sqlite3_bind_double" sqlite3_bind_double
+foreign import ccall unsafe "sqlite3.h sqlite3_bind_double" sqlite3_bind_double
     :: SqlStmt -> CInt -> CDouble -> IO SqlStatus
 
 sqlBindDouble :: SqlStmt -> Int -> Double -> IO ()
@@ -241,7 +241,7 @@ sqlBindDouble stmt n x =
         orDie "sqlite3_bind_double"
 {-# INLINE sqlBindDouble #-}
 
-foreign import ccall "sqlite3.h sqlite3_bind_text" sqlite3_bind_text
+foreign import ccall unsafe "sqlite3.h sqlite3_bind_text" sqlite3_bind_text
     :: SqlStmt -> CInt -> CString -> CInt -> Ptr () -> IO SqlStatus
 
 sqlBindString :: SqlStmt -> Int -> String -> IO ()
@@ -253,7 +253,7 @@ sqlBindString stmt n string = withCStringLen string $ \(cstr, len) ->
         orDie "sqlite3_bind_text"
 {-# INLINE sqlBindString #-}
 
-foreign import ccall "sqlite3.h sqlite3_bind_blob" sqlite3_bind_blob
+foreign import ccall unsafe "sqlite3.h sqlite3_bind_blob" sqlite3_bind_blob
     :: SqlStmt -> CInt -> Ptr () -> CInt -> Ptr () -> IO SqlStatus
 
 sqlBindByteString :: SqlStmt -> Int -> ByteString -> IO ()
@@ -270,7 +270,7 @@ sqlBindLazyByteString stmt n lbs = sqlBindByteString stmt n $
     B.concat $ BL.toChunks lbs
 {-# INLINE sqlBindLazyByteString #-}
 
-foreign import ccall "sqlite3.h sqlite3_bind_null" sqlite3_bind_null
+foreign import ccall unsafe "sqlite3.h sqlite3_bind_null" sqlite3_bind_null
     :: SqlStmt -> CInt -> IO SqlStatus
 
 sqlBindNothing :: SqlStmt -> Int -> IO ()
@@ -278,7 +278,7 @@ sqlBindNothing stmt n = sqlite3_bind_null stmt (fromIntegral n) >>=
     orDie "sqlite3_bind_null"
 {-# INLINE sqlBindNothing #-}
 
-foreign import ccall "sqlite3.h sqlite3_column_int64" sqlite3_column_int64
+foreign import ccall unsafe "sqlite3.h sqlite3_column_int64" sqlite3_column_int64
     :: SqlStmt -> CInt -> IO CLLong
 
 sqlColumnInt64 :: SqlStmt -> Int -> IO Int64
@@ -286,7 +286,7 @@ sqlColumnInt64 stmt n =
     fmap fromIntegral $ sqlite3_column_int64 stmt (fromIntegral n)
 {-# INLINE sqlColumnInt64 #-}
 
-foreign import ccall "sqlite3.h sqlite3_column_double" sqlite3_column_double
+foreign import ccall unsafe "sqlite3.h sqlite3_column_double" sqlite3_column_double
     :: SqlStmt -> CInt -> IO CDouble
 
 sqlColumnDouble :: SqlStmt -> Int -> IO Double
@@ -294,7 +294,7 @@ sqlColumnDouble stmt n =
     fmap realToFrac $ sqlite3_column_double stmt (fromIntegral n)
 {-# INLINE sqlColumnDouble #-}
 
-foreign import ccall "sqlite3.h sqlite3_column_text" sqlite3_column_text
+foreign import ccall unsafe "sqlite3.h sqlite3_column_text" sqlite3_column_text
     :: SqlStmt -> CInt -> IO CString
 
 sqlColumnString :: SqlStmt -> Int -> IO String
@@ -302,10 +302,10 @@ sqlColumnString stmt n =
     sqlite3_column_text stmt (fromIntegral n) >>= peekCString
 {-# INLINE sqlColumnString #-}
 
-foreign import ccall "sqlite3.h sqlite3_column_blob" sqlite3_column_blob
+foreign import ccall unsafe "sqlite3.h sqlite3_column_blob" sqlite3_column_blob
     :: SqlStmt -> CInt -> IO (Ptr ())
 
-foreign import ccall "sqlite3.h sqlite3_column_bytes" sqlite3_column_bytes
+foreign import ccall unsafe "sqlite3.h sqlite3_column_bytes" sqlite3_column_bytes
     :: SqlStmt -> CInt -> IO CInt
 
 sqlColumnByteString :: SqlStmt -> Int -> IO ByteString
@@ -327,7 +327,7 @@ sqlColumnLazyByteString stmt n = fmap (BL.fromChunks . return) $
     sqlColumnByteString stmt n
 {-# INLINE sqlColumnLazyByteString #-}
 
-foreign import ccall "sqlite3.h sqlite3_column_type" sqlite3_column_type
+foreign import ccall unsafe "sqlite3.h sqlite3_column_type" sqlite3_column_type
     :: SqlStmt -> CInt -> IO CInt
 
 sqlColumnIsNothing :: SqlStmt -> Int -> IO Bool
