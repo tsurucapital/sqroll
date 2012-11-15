@@ -24,6 +24,7 @@ module Database.Sqroll
 
     , sqrollSelectEntity
     , sqrollSelectFromRowId
+    , sqrollRebindKey
 
     , sqrollGetList
     , sqrollGetLazyList
