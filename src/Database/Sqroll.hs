@@ -13,7 +13,6 @@ module Database.Sqroll
     , sqrollOpenWith
     , sqrollClose
     , sqrollCheckpoint
-    , sqrollFinalize
 
     , sqrollTransaction
 

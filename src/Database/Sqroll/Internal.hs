@@ -22,7 +22,6 @@ module Database.Sqroll.Internal
     , sqrollOpenWith
     , sqrollClose
     , sqrollCheckpoint
-    , sqrollFinalize
 
     , sqrollTransaction
 
@@ -51,10 +50,10 @@ import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Int (Int64)
+import Foreign.ForeignPtr
 import GHC.Generics (Generic, Rep, from, to)
 import Unsafe.Coerce (unsafeCoerce)
 import System.IO.Unsafe (unsafeInterleaveIO)
-import System.Mem.Weak (addFinalizer)
 
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table
@@ -99,10 +98,10 @@ newtype Key a = Key {unKey :: SqlRowId}
     deriving (Eq, Show, Enum, Ord)
 
 -- | Sql statement with insertion support
-newtype IStmt a = IStmt (SqlStmt, SqlStmt -> a -> IO ())
+newtype IStmt a = IStmt (SqlFStmt, SqlStmt -> a -> IO ())
 
 -- | Sql statement with peek support
-newtype Stmt a = Stmt { unStmt :: (SqlStmt, SqlStmt -> IO (Maybe a)) }
+newtype Stmt a = Stmt { unStmt :: (SqlFStmt, SqlStmt -> IO (Maybe a)) }
 
 
 data Entity a
@@ -168,8 +167,8 @@ makeSelectStatement sqroll defaultRecord = do
     table' <- prepareTable sqroll defaultRecord
     stmt   <- sqlPrepare (sqrollSql sqroll) (tableSelect table'
                             ++ " WHERE rowid >= ? ORDER BY rowid")
-    sqlBindInt64 stmt 1 0
-    sqrollRegisterStmt sqroll (stmt, mkSelectPeek table')
+    withForeignPtr stmt $ \raw -> sqlBindInt64 raw 1 0
+    return $ Stmt (stmt, mkSelectPeek table')
 
 
 -- | Make a statement to select every item of the given type taking
@@ -182,9 +181,10 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
         [c] -> do
             stmt <- sqlPrepare (sqrollSql sqroll) (tableSelect table'
                             ++ " WHERE rowid >= ? AND " ++ c ++ " = ? ORDER BY rowid")
-            sqlBindInt64 stmt 1 0
-            sqlBindInt64 stmt 2 (unKey key)
-            sqrollRegisterStmt sqroll (stmt, mkSelectPeek table')
+            withForeignPtr stmt $ \raw -> do
+                    sqlBindInt64 raw 1 0
+                    sqlBindInt64 raw 2 (unKey key)
+            return $ Stmt (stmt, mkSelectPeek table')
         [] -> error' $ "Table " ++ tableName table' ++
             " does not refer to Table " ++ tableName foreignTable
         _ -> error' $ "There is more than one reference from " ++ tableName table' ++
@@ -207,14 +207,14 @@ sqrollSelectEntity (Stmt (stmt, peek)) = -- {{{
 
 -- | Start from given rowid other than the first one
 sqrollSelectFromRowId :: Stmt a -> Int64 -> IO ()
-sqrollSelectFromRowId (Stmt (stmt, _)) = sqlBindInt64 stmt 1
+sqrollSelectFromRowId (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlBindInt64 raw 1 i
 
 -- | Get all available results from given statement as a one strict list
 sqrollGetList :: Stmt a -> IO [a]
 sqrollGetList (Stmt (stmt, peek)) = go-- {{{
     where
         go = do
-            mPeekResult <- peek stmt
+            mPeekResult <- withForeignPtr stmt peek
             case mPeekResult of
                 Just v -> do
                     rest <- go
@@ -226,7 +226,7 @@ sqrollGetLazyList :: Stmt a -> IO [a]
 sqrollGetLazyList (Stmt (stmt, peek)) = go-- {{{
     where
         go = do
-            mPeekResult <- peek stmt
+            mPeekResult <- withForeignPtr stmt peek
             case mPeekResult of
                 Just v -> do
                     rest <- unsafeInterleaveIO go
@@ -238,7 +238,7 @@ sqrollFoldAll :: (b -> a -> IO b) -> b -> Stmt a -> IO b
 sqrollFoldAll f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
     where
         go b = do
-            mPeekResult <- peek stmt
+            mPeekResult <- withForeignPtr stmt peek
             case mPeekResult of
                 Just a -> do
                     b' <- f b a
@@ -251,7 +251,7 @@ sqrollFold :: (b -> a -> IO (b, Bool)) -> b -> Stmt a -> IO b
 sqrollFold f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
     where
         go b = do
-            mPeekResult <- peek stmt
+            mPeekResult <- withForeignPtr stmt peek
             case mPeekResult of
                 Just a -> do
                     (b', continueFolding) <- f b a
@@ -263,25 +263,14 @@ sqrollFold f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
 -- | Get one value from the statement, will die with error in case of failure
 sqrollGetOne :: Stmt a -> IO a
 sqrollGetOne (Stmt (stmt, peek)) = do-- {{{
-    mPeekResult <- peek stmt
+    mPeekResult <- withForeignPtr stmt peek
     case mPeekResult of
         Just a -> return a
         Nothing -> error "Expected to get at least one value in sqrollGetOne, but got none"-- }}}
 
 -- | Get one value if it's available
 sqrollGetMaybe :: Stmt a -> IO (Maybe a)
-sqrollGetMaybe (Stmt (stmt, peek)) = peek stmt
-
--- | Finalize statement. If not finalized manually statement will
--- be finalized by GC
-sqrollFinalize :: Sqroll -> Stmt a -> IO ()
-sqrollFinalize sqroll (Stmt (stmt, _)) = sqlSafeFinalize (sqrollSql sqroll) stmt
-
-sqrollRegisterStmt :: Sqroll -> (SqlStmt, SqlStmt -> IO (Maybe a)) -> IO (Stmt a)
-sqrollRegisterStmt sqroll s@(stmt, _) = do
-    addFinalizer stmt (sqlSafeFinalize (sqrollSql sqroll) stmt)
-    return $ Stmt s
-
+sqrollGetMaybe (Stmt (stmt, peek)) = withForeignPtr stmt peek
 
 
 data Sqroll = Sqroll
@@ -304,16 +293,7 @@ sqrollOpenWith filePath flags = do
 
 -- | Close sqroll log. All running statements will be finalized automatically
 sqrollClose :: Sqroll -> IO ()
-sqrollClose sqroll = do
-        appenders <- HM.elems <$> readIORef (sqrollCache sqroll)
-        mapM_ closeAppend appenders
-        stmts <- sqlAllStatements (sqrollSql sqroll)
-        mapM_ (sqlSafeFinalize $ sqrollSql sqroll) stmts
-        sqlClose $ sqrollSql sqroll
-    where
-        closeAppend cache = do
-            (IStmt (stmt, _)) <- takeMVar (sqrollCacheInsert cache)
-            sqlFinalize stmt
+sqrollClose = sqlClose . sqrollSql
 
 -- | Move all the data from WAL file to the main db file. Checkpoint
 -- will be performed automatically when database closed.
@@ -355,9 +335,9 @@ sqrollAppend sqroll x = do
     sqlExecute (sqrollSql sqroll) "SAVEPOINT getrowid"
     sqrollAppend_ sqroll x
     stmt <- sqlPrepare (sqrollSql sqroll) "SELECT last_insert_rowid();"
-    sqlStep_ stmt
-    rowId <- sqlColumnInt64 stmt 0
-    sqlFinalize stmt
+    rowId <- withForeignPtr stmt $ \raw -> do
+                    sqlStep_ raw
+                    sqlColumnInt64 raw 0
     sqlExecute (sqrollSql sqroll) "RELEASE SAVEPOINT getrowid"
     return (Key rowId)
 {-# INLINE sqrollAppend #-}
@@ -367,8 +347,9 @@ sqrollAppend_ :: HasTable a => Sqroll -> a -> IO ()
 sqrollAppend_ sqroll x = do
     cache <- sqrollGetCache sqroll
     cc@(IStmt (stmt, poker)) <- takeMVar (sqrollCacheInsert cache)
-    poker stmt x
-    _ <- sqlStep stmt
-    sqlReset stmt
+    withForeignPtr stmt $ \raw -> do
+             poker raw x
+             sqlStep_ raw
+             sqlReset raw
     putMVar (sqrollCacheInsert cache) cc
 {-# INLINE sqrollAppend_ #-}

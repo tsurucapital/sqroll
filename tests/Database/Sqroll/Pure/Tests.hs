@@ -99,5 +99,4 @@ sqrollTailList :: HasTable a => Sqroll -> IO [a]
 sqrollTailList sqroll = do
     stmt <- makeSelectStatement sqroll Nothing
     vals <- sqrollGetList stmt
-    sqrollFinalize sqroll stmt
     return vals

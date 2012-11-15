@@ -2,6 +2,7 @@
 module Database.Sqroll.Sqlite3
     ( Sql
     , SqlStmt
+    , SqlFStmt
     , SqlStatus
     , SqlRowId
 
@@ -16,8 +17,6 @@ module Database.Sqroll.Sqlite3
     , sqlCheckpoint
 
     , sqlPrepare
-    , sqlFinalize
-    , sqlSafeFinalize
     , sqlStep
     , sqlStepAll
     , sqlStepList
@@ -47,7 +46,6 @@ module Database.Sqroll.Sqlite3
     ) where
 
 import Control.Applicative ((<$>))
-import Control.Exception (bracket)
 import Control.Monad (when)
 import Data.Bits ((.|.))
 import Data.ByteString (ByteString)
@@ -63,9 +61,19 @@ import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Foreign.Storable
+import System.Mem (performGC)
 
+-- | Pointer to the db handle itself, can be used as is
 type Sql = Ptr ()
+
+-- | Pointer to the prepared sql statement - should be used anywhere outside, contains
+-- statement finalizer
+type SqlFStmt = ForeignPtr ()
+
+-- | Pointer to the prepared sql statement without finalizer attached, code for binding
+-- and picking from statements should use it because of less overhead
 type SqlStmt = Ptr ()
+
 type SqlStatus = CInt
 
 type SqlRowId = Int64
@@ -131,17 +139,19 @@ foreign import ccall "sqlite3.h sqlite3_close" sqlite3_close
     :: Sql -> IO SqlStatus
 
 sqlClose :: Sql -> IO ()
-sqlClose db = sqlite3_close db >>= orDie "sqlite3_close"
+sqlClose db = do
+    performGC
+    sqlite3_close db >>= orDie "sqlite3_close"
 {-# INLINE sqlClose #-}
 
 foreign import ccall "sqlite3.h sqlite3_prepare_v2" sqlite3_prepare_v2
     :: Sql -> CString -> CInt -> Ptr SqlStmt -> Ptr CString -> IO SqlStatus
 
-sqlPrepare :: Sql -> String -> IO SqlStmt
+sqlPrepare :: Sql -> String -> IO SqlFStmt
 sqlPrepare db str = alloca $ \stmtPtr -> withCStringLen str $ \(cstr, len) -> do
     sqlite3_prepare_v2 db cstr (fromIntegral len) stmtPtr nullPtr >>=
         orDie "sqlite3_prepare_v2"
-    peek stmtPtr
+    peek stmtPtr >>= newForeignPtr sqlite3_finalize_ptr
 {-# INLINE sqlPrepare #-}
 
 foreign import ccall "sqlite3.h sqlite3_wal_checkpoint_v2" sqlite3_wal_checkpoint_v2
@@ -150,10 +160,6 @@ foreign import ccall "sqlite3.h sqlite3_wal_checkpoint_v2" sqlite3_wal_checkpoin
 sqlCheckpoint :: Sql -> IO ()
 sqlCheckpoint db = sqlite3_wal_checkpoint_v2 db nullPtr (sqliteCheckpoint Full) nullPtr nullPtr
         >>= orDie "sqlite3_wal_checkpoint_v2"
-
-sqlFinalize :: SqlStmt -> IO ()
-sqlFinalize stmt = sqlite3_finalize stmt >>= orDie "sqlite3_finalize"
-{-# INLINE sqlFinalize #-}
 
 foreign import ccall "sqlite3.h sqlite3_step" sqlite3_step
     :: SqlStmt -> IO SqlStatus
@@ -195,7 +201,7 @@ sqlReset stmt = sqlite3_reset stmt >>= orDie "sqlite3_reset"
 {-# INLINE sqlReset #-}
 
 sqlExecute :: Sql -> String -> IO ()
-sqlExecute db str = bracket (sqlPrepare db str) sqlFinalize sqlStep >> return ()
+sqlExecute db str = sqlPrepare db str >>= \stmt -> withForeignPtr stmt sqlStep_
 {-# INLINE sqlExecute #-}
 
 
@@ -212,19 +218,6 @@ sqlAllStatements db = allStmtsR [] nullPtr
             if newStmt == nullPtr
                 then return acc
                 else allStmtsR (newStmt : acc) newStmt
-
--- | finalize statement making sure that it was not finalized before
-sqlSafeFinalize :: Sql -> SqlStmt -> IO ()
-sqlSafeFinalize db targetStmt = safeFinR nullPtr
-    where
-        safeFinR :: SqlStmt -> IO ()
-        safeFinR prev = do
-            newStmt <- sqlite3_next_stmt db prev
-            case () of
-                _ | newStmt == targetStmt -> sqlFinalize targetStmt
-                  | newStmt == nullPtr -> return ()
-                  | otherwise -> safeFinR newStmt
-
 
 foreign import ccall "sqlite3.h sqlite3_last_insert_rowid"
     sqlite3_last_insert_rowid
@@ -343,8 +336,8 @@ sqlColumnIsNothing stmt n = do
     return $ t == 5  -- SQLITE_NULL
 {-# INLINE sqlColumnIsNothing #-}
 
-foreign import ccall "sqlite3.h sqlite3_finalize" sqlite3_finalize
-    :: SqlStmt -> IO SqlStatus
+foreign import ccall "sqlite3.h &sqlite3_finalize" sqlite3_finalize_ptr
+    :: FunPtr (SqlStmt -> IO ())
 
 sqlLastInsertRowId :: Sql -> IO SqlRowId
 sqlLastInsertRowId = fmap fromIntegral . sqlite3_last_insert_rowid
@@ -358,8 +351,7 @@ sqlGetRowId stmt = sqlColumnInt64 stmt 0
 sqlTableColumns :: Sql -> String -> IO [String]
 sqlTableColumns sql tableName = do
     stmt <- sqlPrepare sql $ "PRAGMA table_info(" ++ tableName ++ ")"
-    cols <- sqlStepList stmt $ sqlColumnString stmt 1
-    sqlFinalize stmt
+    cols <- withForeignPtr stmt $ \raw -> sqlStepList raw $ sqlColumnString raw 1
     return cols
 
 orDie :: String -> SqlStatus -> IO ()
