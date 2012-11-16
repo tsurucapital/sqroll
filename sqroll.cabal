@@ -12,6 +12,8 @@ build-type:    Simple
 cabal-version: >= 1.8
 
 Library
+  C-sources:      cbits/sqroll.c
+  Include-dirs:   cbits
   Hs-source-dirs: src
   Ghc-options:    -Wall
 
@@ -42,6 +44,8 @@ Library
    sqlite3
 
 Test-suite sqroll-tests
+  C-sources:      cbits/sqroll.c
+  Include-dirs:   cbits
   Ghc-options:    -Wall
   Hs-source-dirs: src tests
   Main-is:        TestSuite.hs

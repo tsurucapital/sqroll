@@ -142,23 +142,26 @@ sqlOpen fp flags = do
     flag = foldl' (.|.) 0 $ map sqlOpenFlagCode flags
 {-# INLINE sqlOpen #-}
 
-foreign import ccall unsafe "sqlite3.h sqlite3_close" sqlite3_close
+foreign import ccall unsafe "sqroll.h sqroll_close" sqroll_close
     :: Sql -> IO SqlStatus
 
 sqlClose :: Sql -> IO ()
 sqlClose db = do
     performGC
-    sqlite3_close db >>= orDie "sqlite3_close"
+    sqroll_close db >>= orDie "sqroll_close"
 {-# INLINE sqlClose #-}
 
 foreign import ccall "sqlite3.h sqlite3_prepare_v2" sqlite3_prepare_v2
     :: Sql -> CString -> CInt -> Ptr SqlStmt -> Ptr CString -> IO SqlStatus
 
+foreign import ccall "sqroll.h &sqroll_finalize_stmt" sqroll_finalize_stmt
+    :: FunPtr (Sql -> IO ())
+
 sqlPrepare :: Sql -> String -> IO SqlFStmt
 sqlPrepare db str = alloca $ \stmtPtr -> withCStringLen str $ \(cstr, len) -> do
     sqlite3_prepare_v2 db cstr (fromIntegral len) stmtPtr nullPtr >>=
         orDie "sqlite3_prepare_v2"
-    peek stmtPtr >>= newForeignPtr sqlite3_finalize_ptr
+    peek stmtPtr >>= newForeignPtr sqroll_finalize_stmt
 {-# INLINE sqlPrepare #-}
 
 foreign import ccall "sqlite3.h sqlite3_wal_checkpoint_v2" sqlite3_wal_checkpoint_v2
@@ -210,7 +213,6 @@ sqlReset stmt = sqlite3_reset stmt >>= orDie "sqlite3_reset"
 sqlExecute :: Sql -> String -> IO ()
 sqlExecute db str = sqlPrepare db str >>= \stmt -> withForeignPtr stmt sqlStep_
 {-# INLINE sqlExecute #-}
-
 
 foreign import ccall unsafe "sqlite3.h sqlite3_next_stmt" sqlite3_next_stmt
     :: Sql -> SqlStmt -> IO SqlStmt
@@ -366,9 +368,6 @@ sqlColumnIsNothing stmt n = do
     t <- sqlite3_column_type stmt (fromIntegral n)
     return $ t == 5  -- SQLITE_NULL
 {-# INLINE sqlColumnIsNothing #-}
-
-foreign import ccall "sqlite3.h &sqlite3_finalize" sqlite3_finalize_ptr
-    :: FunPtr (SqlStmt -> IO ())
 
 sqlLastInsertRowId :: Sql -> IO SqlRowId
 sqlLastInsertRowId = fmap fromIntegral . sqlite3_last_insert_rowid
