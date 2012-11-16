@@ -30,6 +30,8 @@ module Database.Sqroll.Sqlite3
     , sqlBindString
     , sqlBindByteString
     , sqlBindLazyByteString
+    , sqlBindText
+    , sqlBindLazyText
     , sqlBindNothing
 
     , sqlColumnInt64
@@ -37,6 +39,8 @@ module Database.Sqroll.Sqlite3
     , sqlColumnString
     , sqlColumnByteString
     , sqlColumnLazyByteString
+    , sqlColumnText
+    , sqlColumnLazyText
     , sqlColumnIsNothing
 
     , sqlLastInsertRowId
@@ -55,6 +59,9 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Int (Int64)
 import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.List (foldl')
+import Data.Text (Text)
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as TL
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -270,6 +277,20 @@ sqlBindLazyByteString stmt n lbs = sqlBindByteString stmt n $
     B.concat $ BL.toChunks lbs
 {-# INLINE sqlBindLazyByteString #-}
 
+sqlBindText :: SqlStmt -> Int -> Text -> IO ()
+sqlBindText stmt n text = withForeignPtr fptr $ \ptr ->
+    sqlite3_bind_text
+        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) nullPtr >>=
+            orDie "sqlite3_bind_text"
+  where
+    bs           = T.encodeUtf8 text
+    (fptr, o, l) = BI.toForeignPtr bs
+{-# INLINE sqlBindText #-}
+
+sqlBindLazyText :: SqlStmt -> Int -> TL.Text -> IO ()
+sqlBindLazyText stmt n = sqlBindText stmt n . TL.toStrict
+{-# INLINE sqlBindLazyText #-}
+
 foreign import ccall unsafe "sqlite3.h sqlite3_bind_null" sqlite3_bind_null
     :: SqlStmt -> CInt -> IO SqlStatus
 
@@ -326,6 +347,16 @@ sqlColumnLazyByteString :: SqlStmt -> Int -> IO BL.ByteString
 sqlColumnLazyByteString stmt n = fmap (BL.fromChunks . return) $
     sqlColumnByteString stmt n
 {-# INLINE sqlColumnLazyByteString #-}
+
+sqlColumnText :: SqlStmt -> Int -> IO Text
+sqlColumnText stmt =
+    -- See sqlite3 conversion table: this should be perfectly safe
+    fmap T.decodeUtf8 . sqlColumnByteString stmt
+{-# INLINE sqlColumnText #-}
+
+sqlColumnLazyText :: SqlStmt -> Int -> IO TL.Text
+sqlColumnLazyText stmt = fmap TL.fromStrict . sqlColumnText stmt
+{-# INLINE sqlColumnLazyText #-}
 
 foreign import ccall unsafe "sqlite3.h sqlite3_column_type" sqlite3_column_type
     :: SqlStmt -> CInt -> IO CInt

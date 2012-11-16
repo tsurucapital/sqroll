@@ -15,9 +15,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Encoding as TL
 import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
 import Data.Int (Int64)
 import System.Locale (defaultTimeLocale)
@@ -69,20 +67,20 @@ instance Field T.Text where
     fieldTypes   = const [SqlText]
     fieldDefault = ""
 
-    fieldPoke s n v = sqlBindByteString s n (T.encodeUtf8 v)
+    fieldPoke = sqlBindText
     {-# INLINE fieldPoke #-}
 
-    fieldPeek s n = T.decodeUtf8 `fmap` sqlColumnByteString s n
+    fieldPeek = sqlColumnText
     {-# INLINE fieldPeek #-}
 
 instance Field TL.Text where
     fieldTypes   = const [SqlBlob]
     fieldDefault = ""
 
-    fieldPoke s n v = sqlBindLazyByteString s n (TL.encodeUtf8 v)
+    fieldPoke = sqlBindLazyText
     {-# INLINE fieldPoke #-}
 
-    fieldPeek s n = TL.decodeUtf8 `fmap` sqlColumnLazyByteString s n
+    fieldPeek = sqlColumnLazyText
     {-# INLINE fieldPeek #-}
 
 instance Field Int64 where
