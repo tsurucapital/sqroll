@@ -8,7 +8,8 @@ module Database.Sqroll
     , Key (..)
     , Entity (..)
 
-    , Sqroll (sqrollSql)
+    , Sqroll
+    , Stmt
     , sqrollOpen
     , sqrollOpenWith
     , sqrollClose
