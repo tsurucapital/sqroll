@@ -18,12 +18,12 @@ int sqroll_finalize_stmt(sqlite3_stmt *stmt) {
 }
 
 int sqroll_close(sqlite3 *db) {
-    sqlite3_stmt *i;
+    sqlite3_stmt *i = 0;
 
-    for(i = sqlite3_next_stmt(db, 0); i != 0;
-            i = sqlite3_next_stmt(db, i)) {
+    do {
         sqlite3_finalize(i);
-    }
+        i = sqlite3_next_stmt(db, 0);
+    } while (i != 0);
 
     return sqlite3_close(db);
 }
