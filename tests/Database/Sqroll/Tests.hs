@@ -21,7 +21,7 @@ tests = testGroup "Database.Sqroll.Tests"
     [ testCase "testAppendTailUsers" testAppendTailUsers
     , testCase "testModifiedTypes"   testModifiedTypes
     , testCase "testMaybeField"      testMaybeField
-    , testCase "testBeamableField"   testBeamableField
+    , testCase "testGenericField"    testGenericField
     , testCase "testTupleField"      testTupleField
     , testCase "testAliasTable"      testAliasTable
     , testCase "testTableIndexes"    testTableIndexes
@@ -57,8 +57,8 @@ testModifiedTypes = withTmpFile $ \tmpPath -> do
 testMaybeField :: Assertion
 testMaybeField = testAppendTail testKittens
 
-testBeamableField :: Assertion
-testBeamableField = testAppendTail testFooBars
+testGenericField :: Assertion
+testGenericField = testAppendTail testHasGenericFields
 
 testTupleField :: Assertion
 testTupleField = testAppendTail testHasTuples

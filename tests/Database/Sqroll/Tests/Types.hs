@@ -10,8 +10,9 @@ module Database.Sqroll.Tests.Types
     , Kitten (..)
     , testKittens
 
-    , FooBar (..)
-    , testFooBars
+    , GenericField (..)
+    , HasGenericField (..)
+    , testHasGenericFields
 
     , HasTuple (..)
     , testHasTuples
@@ -56,18 +57,25 @@ instance HasTable Kitten
 testKittens :: [Kitten]
 testKittens = [Kitten Nothing, Kitten (Just "Woof")]
 
-data FooBar = FooBar
-    { -- Uses the Beamable instance...
-      fooBarList :: Either String Int
+data GenericField = GenericField
+    { gfInt   :: Int
+    , gfTuple :: (Bool, Bool)
+    , gfText  :: Text
     } deriving (Eq, Generic, Show)
 
-instance Field (Either String Int) where
-    fieldDefault = (Left "")
+instance Field GenericField
 
-instance HasTable FooBar
+data HasGenericField = HasGenericField
+    { hasGenericFieldFoo :: GenericField
+    } deriving (Eq, Generic, Show)
 
-testFooBars :: [FooBar]
-testFooBars = [FooBar (Left "NANANANANANA"), FooBar (Right 3), FooBar (Left "sup")]
+instance HasTable HasGenericField
+
+testHasGenericFields :: [HasGenericField]
+testHasGenericFields =
+    [ HasGenericField $ GenericField 1 (False, True) "Herp"
+    , HasGenericField $ GenericField 2 (True, True)  "Derp"
+    ]
 
 data HasTuple = HasTuple
     { hasTupleFoo :: (Int, Text)

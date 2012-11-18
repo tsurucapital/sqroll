@@ -23,7 +23,7 @@ int sqroll_close(sqlite3 *db) {
     do {
         sqlite3_finalize(i);
         i = sqlite3_next_stmt(db, 0);
-    } while (i != 0)
+    } while (i != 0);
 
     return sqlite3_close(db);
 }
