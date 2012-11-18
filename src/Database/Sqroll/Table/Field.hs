@@ -1,7 +1,9 @@
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Database.Sqroll.Table.Field
     ( Field (..)
@@ -10,7 +12,6 @@ module Database.Sqroll.Table.Field
     ) where
 
 import Control.Applicative ((<$>), (<*>))
-import Data.Beamable (Beamable, decode, encode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -18,6 +19,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
 import Data.Int (Int64)
+import GHC.Generics
 import System.Locale (defaultTimeLocale)
 
 import Database.Sqroll.Sqlite3
@@ -29,18 +31,62 @@ class Field a where
     fieldPoke    :: SqlStmt -> Int -> a -> IO ()
     fieldPeek    :: SqlStmt -> Int -> IO a
 
-    -- Defaults: use Beamable
-    default fieldTypes :: Beamable a => a -> [SqlType]
-    fieldTypes = const [SqlBlob]
+    default fieldTypes :: (Generic a, GField (Rep a)) => a -> [SqlType]
+    fieldTypes = gFieldTypes . from
 
     default fieldRefers :: a -> [String]
     fieldRefers = const []
 
-    default fieldPoke :: Beamable a => SqlStmt -> Int -> a -> IO ()
-    fieldPoke stmt n x = sqlBindByteString stmt n (encode x)
+    default fieldDefault :: (Generic a, GField (Rep a)) => a
+    fieldDefault = to gFieldDefault
 
-    default fieldPeek :: Beamable a => SqlStmt -> Int -> IO a
-    fieldPeek stmt n = fmap decode $ sqlColumnByteString stmt n
+    default fieldPoke :: (Generic a, GField (Rep a))
+                      => SqlStmt -> Int -> a -> IO ()
+    fieldPoke stmt n x = gFieldPoke stmt n (from x)
+
+    default fieldPeek :: (Generic a, GField (Rep a))
+                      => SqlStmt -> Int -> IO a
+    fieldPeek stmt n = fmap to $ gFieldPeek stmt n
+
+-- | Generic class
+class GField f where
+    gFieldTypes   :: f a -> [SqlType]
+    gFieldDefault :: f a
+    gFieldPoke    :: SqlStmt -> Int -> f a -> IO ()
+    gFieldPeek    :: SqlStmt -> Int -> IO (f a)
+
+-- | Metainformation: discard this
+instance forall i c f. GField f => GField (M1 i c f) where
+    gFieldTypes _       = gFieldTypes (undefined :: f a)
+    gFieldDefault       = M1 gFieldDefault
+    gFieldPoke stmt n x = gFieldPoke stmt n (unM1 x)
+    gFieldPeek stmt n   = M1 <$> gFieldPeek stmt n
+
+-- | Actual fields: use Field instance
+instance forall i a. Field a => GField (K1 i a) where
+    gFieldTypes _       = fieldTypes (undefined :: a)
+    gFieldDefault       = K1 fieldDefault
+    gFieldPoke stmt n x = fieldPoke stmt n (unK1 x)
+    gFieldPeek stmt n   = K1 <$> fieldPeek stmt n
+
+-- | Products of fields
+instance forall f g. (GField f, GField g) => GField (f :*: g) where
+    gFieldTypes _ =
+        gFieldTypes (undefined :: f a) ++
+        gFieldTypes (undefined :: g a)
+
+    gFieldDefault = gFieldDefault :*: gFieldDefault
+
+    gFieldPoke stmt n (x :*: y) = do
+        gFieldPoke stmt n x
+        let n' = n + length (gFieldTypes x)
+        gFieldPoke stmt n' y
+
+    gFieldPeek stmt n = do
+        x <- gFieldPeek stmt n
+        let n' = n + length (gFieldTypes x)
+        y <- gFieldPeek stmt n'
+        return (x :*: y)
 
 instance Field Int where
     fieldTypes   = const [SqlInteger]
@@ -305,6 +351,7 @@ instance forall a b c d e f g. (Field a, Field b, Field c, Field d, Field e, Fie
         (,,,,,,) <$> fieldPeek stmt n0 <*> fieldPeek stmt n1 <*>
             fieldPeek stmt n2 <*> fieldPeek stmt n3 <*> fieldPeek stmt n4 <*>
             fieldPeek stmt n5 <*> fieldPeek stmt n6
+
 
 fieldIndexed :: Field a => a -> Bool
 fieldIndexed = not . null . fieldRefers
