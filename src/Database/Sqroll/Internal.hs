@@ -210,8 +210,7 @@ sqrollSelectEntity (Stmt (stmt, peek)) = -- {{{
 sqrollSelectFromRowId :: Stmt a b -> Int64 -> IO ()
 sqrollSelectFromRowId (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlReset raw >> sqlBindInt64 raw 1 i
 
--- | Bind a new value for the foreign key specified in this statement, will probably fail
--- if executed on a statement not bounded by foreign key
+-- | Bind a new value for the foreign key specified in this statement
 sqrollRebindKey :: HasTable b => Stmt a (Key b) -> Int64 -> IO ()
 sqrollRebindKey (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlReset raw >> sqlBindInt64 raw 2 i
 
