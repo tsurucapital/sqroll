@@ -32,6 +32,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testFold"            testFold
     , testCase "testFoldAll"         testFoldAll
     , testCase "testListFields"      testListFields
+    , testCase "testRebindKey"       testRebindKey
     ]
 
 testAppendTailUsers :: Assertion
@@ -90,6 +91,22 @@ testSqrollByKey = withTmpSqroll $ \sqroll -> do
 
     DogOwner "Jasper" key @=? owner
 
+testRebindKey :: Assertion
+testRebindKey = withTmpSqroll $ \sqroll -> do
+    key1 <- sqrollAppend sqroll $ Dog (Kitten (Just "Quack"))
+    key2 <- sqrollAppend sqroll $ Dog (Kitten (Just "Quack"))
+
+    sqrollAppend_ sqroll $ DogOwner "Jasper" key1
+    sqrollAppend_ sqroll $ DogOwner "Marit"  key2
+
+    stmt <- makeSelectByKeyStatement sqroll Nothing key2
+    owner2 <- sqrollGetOne stmt
+
+    sqrollRebindKey stmt (unKey key1)
+    owner1 <- sqrollGetOne stmt
+
+    DogOwner "Jasper" key1 @=? owner1
+    DogOwner "Marit" key2 @=? owner2
 
 testAppendTail :: (Eq a, HasTable a, Show a) => [a] -> Assertion
 testAppendTail items = withTmpSqroll $ \sqroll -> do
