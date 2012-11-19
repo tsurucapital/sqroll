@@ -210,74 +210,81 @@ sqrollSelectEntity (Stmt (stmt, peek)) = -- {{{
 
 -- | Start from given rowid other than the first one
 sqrollSelectFromRowId :: Stmt a b -> Int64 -> IO ()
-sqrollSelectFromRowId (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlReset raw >> sqlBindInt64 raw 1 i
+sqrollSelectFromRowId (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlBindInt64 raw 1 i
 
 -- | Bind a new value for the foreign key specified in this statement
 sqrollRebindKey :: HasTable b => Stmt a (Key b) -> Int64 -> IO ()
-sqrollRebindKey (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlReset raw >> sqlBindInt64 raw 2 i
+sqrollRebindKey (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlBindInt64 raw 2 i
 
 -- | Get all available results from given statement as a one strict list
 sqrollGetList :: Stmt a b -> IO [a]
 sqrollGetList (Stmt (stmt, peek)) = go-- {{{
     where
-        go = do
-            mPeekResult <- withForeignPtr stmt peek
+        go = withForeignPtr stmt $ \raw -> do
+            mPeekResult <- peek raw
             case mPeekResult of
                 Just v -> do
                     rest <- go
                     return $ v : rest
-                Nothing -> return []-- }}}
+                Nothing -> sqlReset raw >> return []-- }}}
 
 -- | Get all available results from given statement as a one lazy list
 sqrollGetLazyList :: Stmt a b -> IO [a]
 sqrollGetLazyList (Stmt (stmt, peek)) = go-- {{{
     where
-        go = do
-            mPeekResult <- withForeignPtr stmt peek
+        go = withForeignPtr stmt $ \raw -> do
+            mPeekResult <- peek raw
             case mPeekResult of
                 Just v -> do
                     rest <- unsafeInterleaveIO go
                     return $ v : rest
-                Nothing -> return []-- }}}
+                Nothing -> sqlReset raw >> return []-- }}}
 
 -- | Fold over all available results in given statement
 sqrollFoldAll :: (b -> a -> IO b) -> b -> Stmt a c -> IO b
 sqrollFoldAll f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
     where
-        go b = do
-            mPeekResult <- withForeignPtr stmt peek
+        go b = withForeignPtr stmt $ \raw -> do
+            mPeekResult <- peek raw
             case mPeekResult of
                 Just a -> do
                     b' <- f b a
                     go b'
-                Nothing -> return b-- }}}
+                Nothing -> sqlReset raw >> return b-- }}}
 
 -- | Fold over all available results in given statement with option to interrupt computation
--- (return False as second element of the pair to interrupt)
+-- (return False as second element of the pair to interrupt), after interruption statement
+-- will point to the next available row
 sqrollFold :: (b -> a -> IO (b, Bool)) -> b -> Stmt a c -> IO b
-sqrollFold f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
+sqrollFold f initialValue fstmt@(Stmt (stmt, peek)) = go initialValue-- {{{
     where
-        go b = do
-            mPeekResult <- withForeignPtr stmt peek
+        go b = withForeignPtr stmt $ \raw -> do
+            mPeekResult <- peek raw
             case mPeekResult of
                 Just a -> do
                     (b', continueFolding) <- f b a
                     if continueFolding
                         then go b'
-                        else return b'
-                Nothing -> return b-- }}}
+                        else do rowId <- sqlGetRowId raw
+                                sqlReset raw
+                                sqrollSelectFromRowId fstmt rowId
+                                return b'
+                Nothing -> sqlReset raw >> return b-- }}}
 
 -- | Get one value from the statement, will die with error in case of failure
 sqrollGetOne :: Stmt a b -> IO a
-sqrollGetOne (Stmt (stmt, peek)) = do-- {{{
-    mPeekResult <- withForeignPtr stmt peek
+sqrollGetOne (Stmt (stmt, peek)) = withForeignPtr stmt $ \raw -> do-- {{{
+    mPeekResult <- peek raw
     case mPeekResult of
-        Just a -> return a
+        Just a -> sqlReset raw >> return a
         Nothing -> error "Expected to get at least one value in sqrollGetOne, but got none"-- }}}
 
 -- | Get one value if it's available
 sqrollGetMaybe :: Stmt a b -> IO (Maybe a)
-sqrollGetMaybe (Stmt (stmt, peek)) = withForeignPtr stmt peek
+sqrollGetMaybe (Stmt (stmt, peek)) = withForeignPtr stmt $ \raw -> do
+    result <- peek raw
+    sqlReset raw
+    return result
 
 
 data Sqroll = Sqroll
