@@ -94,14 +94,16 @@ aliasTable name mk unmk =
     let NamedTable _ table' = table
     in NamedTable name $ mapTable mk unmk table'
 
--- Maybe rename to SqrollKey?
+-- Foreign key
 newtype Key a = Key {unKey :: SqlRowId}
     deriving (Eq, Show, Enum, Ord)
 
 -- | Sql statement with insertion support
 newtype IStmt a = IStmt (SqlFStmt, SqlStmt -> a -> IO ())
 
--- | Sql statement with peek support
+-- | Sql statement with peek support, first argument shows result type
+-- which you can get from this Stmt, second one shows if this statement operates with
+-- specific foreign key
 newtype Stmt a b = Stmt { unStmt :: (SqlFStmt, SqlStmt -> IO (Maybe a)) }
 
 
