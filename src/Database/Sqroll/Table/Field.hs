@@ -28,8 +28,8 @@ class Field a where
     fieldTypes   :: a -> [SqlType]  -- Should work with 'undefined'
     fieldRefers  :: a -> [String]   -- Should work with 'undefined'
     fieldDefault :: a
-    fieldPoke    :: SqlStmt -> Int -> a -> IO ()
-    fieldPeek    :: SqlStmt -> Int -> IO a
+    fieldPoke    :: SqlStmt -> Int -> a -> IO () -- Int represents position of the first
+    fieldPeek    :: SqlStmt -> Int -> IO a       -- primitive field for that Field instance
 
     default fieldTypes :: (Generic a, GField (Rep a)) => a -> [SqlType]
     fieldTypes = gFieldTypes . from
