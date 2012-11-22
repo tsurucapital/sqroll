@@ -34,6 +34,8 @@ module Database.Sqroll.Sqlite3
     , sqlBindLazyText
     , sqlBindNothing
 
+    , sqlBindParamIndex
+
     , sqlColumnInt64
     , sqlColumnDouble
     , sqlColumnString
@@ -300,6 +302,13 @@ sqlBindNothing :: SqlStmt -> Int -> IO ()
 sqlBindNothing stmt n = sqlite3_bind_null stmt (fromIntegral n) >>=
     orDie "sqlite3_bind_null"
 {-# INLINE sqlBindNothing #-}
+
+foreign import ccall unsafe "sqlite3.h sqlite3_bind_parameter_index" sqlite3_bind_parameter_index
+    ::  SqlStmt -> CString -> IO CInt
+
+sqlBindParamIndex :: SqlStmt -> String -> IO Int
+sqlBindParamIndex stmt n = fromIntegral <$> withCString n (sqlite3_bind_parameter_index stmt)
+
 
 foreign import ccall unsafe "sqlite3.h sqlite3_column_int64" sqlite3_column_int64
     :: SqlStmt -> CInt -> IO CLLong
