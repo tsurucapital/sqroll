@@ -41,6 +41,9 @@ module Database.Sqroll.Internal
     , sqrollFoldAll
     , sqrollGetOne
     , sqrollGetMaybe
+
+    , prepareTable
+    , mkSelectPeek
     ) where
 
 import Control.Applicative (pure, (<$>), (<*>))

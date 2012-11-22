@@ -23,6 +23,9 @@ module Database.Sqroll.Table
     , tablePeek
     , tableRefers
     , tableMakeDefaults
+
+      -- * Useful if you want to access raw fields
+    , makeFieldNames
     ) where
 
 import Control.Applicative
@@ -40,9 +43,11 @@ data FieldInfo t a = FieldInfo
     }
 
 fieldNames :: forall t a. Field a => FieldInfo t a -> [String]
-fieldNames fi = case fieldTypes (undefined :: a) of
-    [_] -> [fieldName fi]
-    ft  -> [fieldName fi ++ "_" ++ show i | i <- [0 .. length ft - 1]]
+fieldNames fi = makeFieldNames (fieldName fi) (length $ fieldTypes (undefined :: a))
+
+makeFieldNames :: String -> Int -> [String]
+makeFieldNames base 1 = [base]
+makeFieldNames base n = [base ++ "_" ++ show i | i <- [0 .. n-1]]
 
 fieldColumns' :: forall t a. Field a => FieldInfo t a -> Int
 fieldColumns' _ = length $ fieldTypes (undefined :: a)
