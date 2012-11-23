@@ -1,13 +1,24 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Database.Sqroll.Tests.Types
     ( User (..)
     , testUsers
 
+    -- those are TH generated
+    , UserFirstName (..)
+    , UserLastName (..)
+    , UserPassword (..)
+    , UserAge (..)
+
     , Kitten (..)
+    , KittenWoof (..)
     , testKittens
 
     , GenericField (..)
@@ -18,6 +29,7 @@ module Database.Sqroll.Tests.Types
     , testHasTuples
 
     , Dog (..)
+    , DogKittenWoof (..)
     , DogOwner (..)
 
     , Sandwich (..)
@@ -31,6 +43,7 @@ import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 import Database.Sqroll (HasTable (..), Key, aliasTable)
+import Database.Sqroll.Custom
 import Database.Sqroll.Table.Field (Field (..))
 
 data User = User
@@ -39,6 +52,8 @@ data User = User
     , userAge       :: Int
     , userPassword  :: ByteString
     } deriving (Eq, Generic, Show)
+
+$(deriveExtendedQueries ''User)
 
 instance HasTable User
 
@@ -53,6 +68,8 @@ data Kitten = Kitten
     } deriving (Eq, Generic, Show)
 
 instance HasTable Kitten
+
+$(deriveExtendedQueries ''Kitten)
 
 testKittens :: [Kitten]
 testKittens = [Kitten Nothing, Kitten (Just "Woof")]
@@ -93,6 +110,8 @@ testHasTuples = return $ HasTuple (3, "hi") (("foo", 10), True) ("oh", 1, False)
 
 newtype Dog = Dog {unDog :: Kitten}
     deriving (Eq, Generic, Show)
+
+$(deriveExtendedQueries ''Dog)
 
 instance HasTable Dog where
     table = aliasTable "dog" Dog unDog

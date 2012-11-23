@@ -1,11 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Sqroll.Tests
     ( tests
     ) where
 
 import Data.ByteString.Char8 ()
+import qualified Data.Text as T
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
@@ -33,6 +36,8 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testFoldAll"         testFoldAll
     , testCase "testListFields"      testListFields
     , testCase "testRebindKey"       testRebindKey
+    , testCase "testCustomQuery"     testCustomQuery
+    , testCase "testCustomQueryNT"   testCustomQueryNT
     ]
 
 testAppendTailUsers :: Assertion
@@ -174,3 +179,34 @@ testListFields = withTmpSqroll $ \sqroll -> do
     let sandwich'' = sandwich' { sandwichComponents = map snd (bacons' :: [(Key Sandwich, SandwichComponent)]) }
 
     sandwich @=? sandwich''
+
+
+testCustomQuery :: Assertion
+testCustomQuery = withTmpSqroll $ \sqroll -> do
+    let users1 = [User "John" "Doe" num "kittens" | num <- [1..10]]
+        users2 = [User "Jane" "Doe" num "kittens" | num <- [1..10]]
+        users = users1 ++ users2
+        expected = filter ((== "John") . userFirstName) . filter ((>= 5) . userAge) $ users
+
+    mapM_ (sqrollAppend_ sqroll) users
+    let cond = UserFirstName ==. "John" &&. UserAge >=. 5
+    stmt <- makeCustomSelectStatement sqroll Nothing cond
+
+    users' <- sqrollGetList stmt
+    expected @=? users'
+
+testCustomQueryNT :: Assertion
+testCustomQueryNT = withTmpSqroll $ \sqroll -> do
+    let dogs = [Dog $ Kitten (Just . T.pack $ "foo" ++ show n) | n <- [1..10 :: Int]]
+        cats = [Kitten (Just . T.pack $ "bar" ++ show n) | n <- [1..10 :: Int]]
+
+    mapM_ (sqrollAppend_ sqroll) dogs
+    mapM_ (sqrollAppend_ sqroll) cats
+
+    let condD = DogKittenWoof ==. Just "foo10"
+        condC = KittenWoof ==. Just "bar1"
+
+    dog' <- makeCustomSelectStatement sqroll Nothing condD >>= sqrollGetList
+    cat' <- makeCustomSelectStatement sqroll Nothing condC >>= sqrollGetList
+
+    ([last dogs], [head cats]) @=? (dog', cat')
