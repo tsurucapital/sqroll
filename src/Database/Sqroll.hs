@@ -33,7 +33,10 @@ module Database.Sqroll
     , sqrollFoldAll
     , sqrollGetOne
     , sqrollGetMaybe
+
+    , module Database.Sqroll.Custom
     ) where
 
 import Database.Sqroll.Internal
 import Database.Sqroll.Table.Field (HString (..))
+import Database.Sqroll.Custom
