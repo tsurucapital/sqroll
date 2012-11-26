@@ -77,7 +77,19 @@ infixr 2 ||.
 (<=.) :: (IsTag full tag, Field (Component full tag)) => tag -> Component full tag -> Condition full
 (<=.) = C_Lte-- }}}
 
-
+-- | Derive some instances required for extended queries. To use those instances you will have
+-- to add following LANGUAGE pragmas: TypeFamilies, MultiParamTypeClasses and TemplateHaskell
+-- for deriving itself.
+--
+-- For every field of given record style datatype with single constructor created one tag
+-- datatype with the same name as field accessor, but with first letter capitalized:
+--
+-- > data Foo { fooBar :: Int, fooBaz :: Double }
+--
+-- following tags are created:
+--
+-- > data FooBar = FooBar
+-- > data FooBaz = FooBaz
 deriveExtendedQueries :: Name -> Q [Dec]
 deriveExtendedQueries typeName = do
         typeInfo <- reify typeName
@@ -188,6 +200,16 @@ condOffset (C_Lt _ val) = length $ fieldTypes val
 condOffset (C_Gte _ val) = length $ fieldTypes val
 condOffset (C_Lte _ val) = length $ fieldTypes val
 
+
+-- | With tag types derived using 'deriveExtendedQueries' you can create queries with
+-- customized WHERE conditions:
+-- > WHERE fooBar > 3 AND fooBaz < 50
+--
+-- Suppose we have the same datatype as described in 'deriveExtendedQueries' docs.
+-- > do let cond = FooBar >= 3  &&. FooBaz <. 50
+-- >    stmt <- makeCustomSelectStatement db dflt  cond
+--
+-- You can use resulting Stmt with all available Stmt processing functions.
 makeCustomSelectStatement :: HasTable a => Sqroll -> Maybe a -> Condition a -> IO (Stmt a a)
 makeCustomSelectStatement sqroll defaultRecord cond = do
     table' <- prepareTable sqroll defaultRecord
