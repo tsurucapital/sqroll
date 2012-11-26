@@ -1,14 +1,9 @@
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Sqroll.Custom
     ( deriveExtendedQueries
