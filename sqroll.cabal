@@ -28,6 +28,7 @@ Library
     Database.Sqroll.Table.Field
     Database.Sqroll.Table.Generic
     Database.Sqroll.Table.Naming
+    Database.Sqroll.TH
 
   Build-depends:
     base                 >= 4   && < 5,
@@ -57,6 +58,7 @@ Test-suite sqroll-tests
     Database.Sqroll.Pure.Tests
     Database.Sqroll.Sqlite3.Tests
     Database.Sqroll.Table.Naming.Tests
+    Database.Sqroll.TH.Tests
     Database.Sqroll.Tests
     Database.Sqroll.Tests.ModifiedTypes
     Database.Sqroll.Tests.Types

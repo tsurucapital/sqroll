@@ -44,9 +44,10 @@ module Database.Sqroll.Internal
 
     , prepareTable
     , mkSelectPeek
+    , sqrollInitializeTable
     ) where
 
-import Control.Applicative (pure, (<$>), (<*>))
+import Control.Applicative (pure, (<$>), (<*>), (<$))
 import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
 import Control.Monad (unless)
 import Control.Monad.Trans (MonadIO, liftIO)
@@ -334,6 +335,9 @@ sqrollGetCache sqroll = do
   where
     table' = table :: NamedTable a
     name   = tableName table'
+
+sqrollInitializeTable :: forall a. HasTable a => Sqroll -> a -> IO ()
+sqrollInitializeTable sqroll _ = () <$ (sqrollGetCache sqroll :: IO (SqrollCache a))
 
 -- | Perform set of logging actions inside sqlite transaction
 sqrollTransaction :: MonadIO m => Sqroll -> m a -> m a
