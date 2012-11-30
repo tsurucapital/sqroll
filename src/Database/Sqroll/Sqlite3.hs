@@ -162,7 +162,7 @@ foreign import ccall "sqroll.h &sqroll_finalize_stmt" sqroll_finalize_stmt
 sqlPrepare :: Sql -> String -> IO SqlFStmt
 sqlPrepare db str = alloca $ \stmtPtr -> withCStringLen str $ \(cstr, len) -> do
     sqlite3_prepare_v2 db cstr (fromIntegral len) stmtPtr nullPtr >>=
-        orDie "sqlite3_prepare_v2"
+        orDie ("sqlite3_prepare_v2: (" ++ str ++ ")")
     peek stmtPtr >>= newForeignPtr sqroll_finalize_stmt
 {-# INLINE sqlPrepare #-}
 
