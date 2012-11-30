@@ -245,35 +245,36 @@ sqrollGetLazyList (Stmt (stmt, peek)) = go-- {{{
                 Nothing -> sqlReset raw >> return []-- }}}
 
 -- | Fold over all available results in given statement
-sqrollFoldAll :: (b -> a -> IO b) -> b -> Stmt a c -> IO b
+sqrollFoldAll :: MonadIO m => (b -> a -> m b) -> b -> Stmt a c -> m b
 sqrollFoldAll f initialValue (Stmt (stmt, peek)) = go initialValue-- {{{
     where
-        go b = withForeignPtr stmt $ \raw -> do
-            mPeekResult <- peek raw
+        go b = do
+            mPeekResult <- liftIO $ withForeignPtr stmt peek
             case mPeekResult of
                 Just a -> do
                     b' <- f b a
                     go b'
-                Nothing -> sqlReset raw >> return b-- }}}
+                Nothing -> liftIO (withForeignPtr stmt sqlReset) >> return b-- }}}
 
 -- | Fold over all available results in given statement with option to interrupt computation
 -- (return False as second element of the pair to interrupt), after interruption statement
 -- will point to the next available row
-sqrollFold :: (b -> a -> IO (b, Bool)) -> b -> Stmt a c -> IO b
+sqrollFold :: MonadIO m => (b -> a -> m (b, Bool)) -> b -> Stmt a c -> m b
 sqrollFold f initialValue fstmt@(Stmt (stmt, peek)) = go initialValue-- {{{
     where
-        go b = withForeignPtr stmt $ \raw -> do
-            mPeekResult <- peek raw
+        go b = do
+            mPeekResult <- liftIO $ withForeignPtr stmt peek
             case mPeekResult of
                 Just a -> do
                     (b', continueFolding) <- f b a
                     if continueFolding
                         then go b'
-                        else do rowId <- sqlGetRowId raw
+                        else liftIO $ withForeignPtr stmt $ \raw -> do
+                                rowId <- sqlGetRowId raw
                                 sqlReset raw
                                 sqrollSelectFromRowId fstmt rowId
                                 return b'
-                Nothing -> sqlReset raw >> return b-- }}}
+                Nothing -> liftIO (withForeignPtr stmt sqlReset) >> return b-- }}}
 
 -- | Get one value from the statement, will die with error in case of failure
 sqrollGetOne :: Stmt a b -> IO a
