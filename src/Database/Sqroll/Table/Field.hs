@@ -17,10 +17,9 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
-import Data.Time (Day (..), UTCTime (..), formatTime, parseTime)
+import Data.Time (Day (..), UTCTime (..))
 import Data.Int (Int64)
 import GHC.Generics
-import System.Locale (defaultTimeLocale)
 
 import Database.Sqroll.Sqlite3
 
@@ -198,13 +197,18 @@ instance forall a. Field a => Field (Maybe a) where
     {-# INLINE fieldPeek #-}
 
 instance Field UTCTime where
-    fieldTypes   = const [SqlText]
+    fieldTypes   = const [SqlInteger, SqlInteger]
     fieldDefault = UTCTime (ModifiedJulianDay 0) 0
 
-    fieldPoke stmt n time = sqlBindString stmt n (formatSqliteTime time)
+    fieldPoke stmt n (UTCTime (ModifiedJulianDay d) t) = do
+        sqlBindInt64 stmt n (fromIntegral d)
+        sqlBindInt64 stmt (n+1) (fromIntegral $ fromEnum t)
     {-# INLINE fieldPoke #-}
 
-    fieldPeek stmt = fmap parseSqliteTime . sqlColumnString stmt
+    fieldPeek stmt n = do
+        d <- fromIntegral <$> sqlColumnInt64 stmt n
+        t <- (toEnum . fromIntegral) <$> sqlColumnInt64 stmt (n+1)
+        return $ UTCTime (ModifiedJulianDay d) t
     {-# INLINE fieldPeek #-}
 
 instance forall a b. (Field a, Field b) => Field (a, b) where
@@ -355,21 +359,6 @@ instance forall a b c d e f g. (Field a, Field b, Field c, Field d, Field e, Fie
 
 fieldIndexed :: Field a => a -> Bool
 fieldIndexed = not . null . fieldRefers
-
-formatSqliteTime :: UTCTime -> String
-formatSqliteTime = take 23 . formatTime defaultTimeLocale sqliteTimeFmt
-{-# INLINE formatSqliteTime #-}
-
-parseSqliteTime :: String -> UTCTime
-parseSqliteTime string =
-    case parseTime defaultTimeLocale sqliteTimeFmt string of
-        Just t  -> t
-        Nothing -> error $ "parseSqliteTime: Could not parse: " ++ string
-{-# INLINE parseSqliteTime #-}
-
-sqliteTimeFmt :: String
-sqliteTimeFmt = "%Y-%m-%d %H:%M:%S%Q"
-{-# INLINE sqliteTimeFmt #-}
 
 -- | Shorthand...
 ud :: a
