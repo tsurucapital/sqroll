@@ -125,7 +125,7 @@ instance HasTable DogOwner
 
 data Sandwich = Sandwich
     { sandwichSize :: Text
-    , sandwichOperation :: Text
+    , sandwichOrder :: Text
     , sandwichComponents :: [SandwichComponent]
     } deriving (Eq, Generic, Show)
 

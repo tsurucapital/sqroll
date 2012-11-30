@@ -108,10 +108,10 @@ tableFields = tableFoldMap fieldName'
 
 tableCreate :: NamedTable t -> String
 tableCreate table =
-    "CREATE TABLE IF NOT EXISTS " ++ tableName table ++ " (" ++
+    "CREATE TABLE IF NOT EXISTS [" ++ tableName table ++ "] (" ++
     intercalate ", " (map makeField $ tableFields table) ++ ")"
   where
-    makeField (name, type') = name ++ " " ++ sqlTypeToString type'
+    makeField (name, fType) = "[" ++ name ++ "] " ++ sqlTypeToString fType
 
 tableIndexes :: forall t. NamedTable t -> [String]
 tableIndexes table = tableFoldMap tableIndex table
@@ -121,22 +121,22 @@ tableIndexes table = tableFoldMap tableIndex table
         guard $ fieldIndexed (undefined :: a)
         let idxName = "index_" ++ tableName table ++ "_" ++ fieldName fi
         return $
-            "CREATE INDEX IF NOT EXISTS " ++ idxName ++ " ON " ++
-            tableName table ++ " (" ++ fieldName fi ++ ")"
+            "CREATE INDEX IF NOT EXISTS [" ++ idxName ++ "] ON [" ++
+            tableName table ++ "] ([" ++ fieldName fi ++ "])"
 
 tableInsert :: NamedTable t -> String
 tableInsert table =
-    "INSERT INTO " ++ tableName table ++ " (" ++
-    intercalate ", " (map fst $ tableFields table) ++
-    ") VALUES (" ++
+    "INSERT INTO [" ++ tableName table ++ "] ([" ++
+    intercalate "], [" (map fst $ tableFields table) ++
+    "]) VALUES (" ++
     intercalate ", " (replicate (length fields) "?") ++ ")"
   where
     fields = tableFields table
 
 tableSelect :: NamedTable t -> String
 tableSelect table =
-    "SELECT rowid, " ++ intercalate ", " (map fst $ tableFields table) ++
-    " FROM " ++ tableName table
+    "SELECT rowid, [" ++ intercalate "], [" (map fst $ tableFields table) ++
+    "] FROM [" ++ tableName table ++ "]"
 
 tablePoke :: forall t. NamedTable t -> SqlStmt -> t -> IO ()
 tablePoke (NamedTable _ table) stmt = \t -> go table t 1 >> return ()

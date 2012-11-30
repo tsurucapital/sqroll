@@ -74,7 +74,7 @@ testAliasTable = testAppendTail $ map Dog testKittens
 
 testTableIndexes :: Assertion
 testTableIndexes =
-    ["CREATE INDEX IF NOT EXISTS index_dog_owner_dog ON dog_owner (dog)"] @=?
+    ["CREATE INDEX IF NOT EXISTS [index_dog_owner_dog] ON [dog_owner] ([dog])"] @=?
     tableIndexes (table :: NamedTable DogOwner)
 
 testTableRefers :: Assertion
