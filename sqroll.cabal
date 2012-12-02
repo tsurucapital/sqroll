@@ -26,6 +26,7 @@ Library
     Database.Sqroll.Sqlite3
     Database.Sqroll.Table
     Database.Sqroll.Table.Field
+    Database.Sqroll.Table.Field.Unique
     Database.Sqroll.Table.Generic
     Database.Sqroll.Table.Naming
     Database.Sqroll.TH

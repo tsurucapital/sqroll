@@ -118,11 +118,16 @@ tableIndexes table = tableFoldMap tableIndex table
   where
     tableIndex :: forall a. Field a => FieldInfo t a -> [String]
     tableIndex fi = do
-        guard $ fieldIndexed (undefined :: a)
+        index <- fieldIndexes (undefined :: a)
         let idxName = "index_" ++ tableName table ++ "_" ++ fieldName fi
-        return $
-            "CREATE INDEX IF NOT EXISTS [" ++ idxName ++ "] ON [" ++
-            tableName table ++ "] ([" ++ fieldName fi ++ "])"
+        return $ case index of
+            IndexFK _ ->
+                "CREATE INDEX IF NOT EXISTS " ++ idxName ++ " ON " ++
+                tableName table ++ " (" ++ fieldName fi ++ ")"
+            IndexUnique ->
+                "CREATE UNIQUE INDEX IF NOT EXISTS unique_" ++ idxName ++
+                " ON " ++ tableName table ++ " (" ++
+                intercalate ", " (fieldNames fi) ++ ")"
 
 tableInsert :: NamedTable t -> String
 tableInsert table =
@@ -178,7 +183,9 @@ tableRefers (NamedTable name _) = tableFoldMap go
   where
     go :: forall a. Field a => FieldInfo t a -> [String]
     go fi =
-        [fieldName fi | name' <- fieldRefers (undefined :: a), name == name']
+        [ fieldName fi
+        | IndexFK name' <- fieldIndexes (undefined :: a), name == name'
+        ]
 
 -- | Check if columns are missing in the database and ensure the defaults are
 -- used in those cases

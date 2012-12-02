@@ -119,7 +119,7 @@ data Entity a
 
 instance forall a. HasTable a => Field (Key a) where
     fieldTypes   = const [SqlInteger]
-    fieldRefers  = const [tableName (table :: NamedTable a)]
+    fieldIndexes = const [IndexFK $ tableName (table :: NamedTable a)]
     fieldDefault = Key (-1)
 
     fieldPoke stmt n (Key x) = sqlBindInt64 stmt n x

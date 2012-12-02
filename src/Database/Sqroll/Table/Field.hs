@@ -6,8 +6,8 @@
 {-# LANGUAGE TypeOperators #-}
 
 module Database.Sqroll.Table.Field
-    ( Field (..)
-    , fieldIndexed
+    ( Index (..)
+    , Field (..)
     , HString (..)
     ) where
 
@@ -23,9 +23,14 @@ import GHC.Generics
 
 import Database.Sqroll.Sqlite3
 
+data Index
+    = IndexFK String
+    | IndexUnique
+    deriving (Show)
+
 class Field a where
     fieldTypes   :: a -> [SqlType]  -- Should work with 'undefined'
-    fieldRefers  :: a -> [String]   -- Should work with 'undefined'
+    fieldIndexes :: a -> [Index]    -- Should work with 'undefined'
     fieldDefault :: a
     fieldPoke    :: SqlStmt -> Int -> a -> IO () -- Int represents position of the first
     fieldPeek    :: SqlStmt -> Int -> IO a       -- primitive field for that Field instance
@@ -33,8 +38,8 @@ class Field a where
     default fieldTypes :: (Generic a, GField (Rep a)) => a -> [SqlType]
     fieldTypes = gFieldTypes . from
 
-    default fieldRefers :: a -> [String]
-    fieldRefers = const []
+    default fieldIndexes :: a -> [Index]
+    fieldIndexes = const []
 
     default fieldDefault :: (Generic a, GField (Rep a)) => a
     fieldDefault = to gFieldDefault
@@ -355,10 +360,6 @@ instance forall a b c d e f g. (Field a, Field b, Field c, Field d, Field e, Fie
         (,,,,,,) <$> fieldPeek stmt n0 <*> fieldPeek stmt n1 <*>
             fieldPeek stmt n2 <*> fieldPeek stmt n3 <*> fieldPeek stmt n4 <*>
             fieldPeek stmt n5 <*> fieldPeek stmt n6
-
-
-fieldIndexed :: Field a => a -> Bool
-fieldIndexed = not . null . fieldRefers
 
 -- | Shorthand...
 ud :: a
