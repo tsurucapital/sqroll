@@ -73,8 +73,8 @@ testTupleField = testAppendTail testHasTuples
 testUniqueIndex :: Assertion
 testUniqueIndex =
     ["CREATE UNIQUE INDEX IF NOT EXISTS " ++
-        "unique_index_has_unique_index_coords ON " ++
-        "has_unique_index (coords_0, coords_1)"] @=?
+        "[unique_index_has_unique_index_coords] ON " ++
+        "[has_unique_index] ([coords_0], [coords_1])"] @=?
     tableIndexes (table :: NamedTable HasUniqueIndex)
 
 testAliasTable :: Assertion
@@ -82,7 +82,8 @@ testAliasTable = testAppendTail $ map Dog testKittens
 
 testTableIndexes :: Assertion
 testTableIndexes =
-    ["CREATE INDEX IF NOT EXISTS index_dog_owner_dog ON dog_owner (dog)"] @=?
+    ["CREATE INDEX IF NOT EXISTS [index_dog_owner_dog] " ++
+        "ON [dog_owner] ([dog])"] @=?
     tableIndexes (table :: NamedTable DogOwner)
 
 testTableRefers :: Assertion

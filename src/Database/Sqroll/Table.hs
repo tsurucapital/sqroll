@@ -122,12 +122,12 @@ tableIndexes table = tableFoldMap tableIndex table
         let idxName = "index_" ++ tableName table ++ "_" ++ fieldName fi
         return $ case index of
             IndexFK _ ->
-                "CREATE INDEX IF NOT EXISTS " ++ idxName ++ " ON " ++
-                tableName table ++ " (" ++ fieldName fi ++ ")"
+                "CREATE INDEX IF NOT EXISTS [" ++ idxName ++ "] ON [" ++
+                tableName table ++ "] ([" ++ fieldName fi ++ "])"
             IndexUnique ->
-                "CREATE UNIQUE INDEX IF NOT EXISTS unique_" ++ idxName ++
-                " ON " ++ tableName table ++ " (" ++
-                intercalate ", " (fieldNames fi) ++ ")"
+                "CREATE UNIQUE INDEX IF NOT EXISTS [unique_" ++ idxName ++
+                "] ON [" ++ tableName table ++ "] (" ++
+                intercalate ", " ["[" ++ n ++ "]" | n <- fieldNames fi] ++ ")"
 
 tableInsert :: NamedTable t -> String
 tableInsert table =
