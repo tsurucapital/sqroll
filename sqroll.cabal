@@ -13,10 +13,13 @@ cabal-version: >= 1.8
 Extra-source-files: cbits/sqroll.h
 
 Library
-  C-sources:      cbits/sqroll.c
+  C-sources:      cbits/sqroll.c,
+                  cbits/sqlite3.c
   Include-dirs:   cbits
+  Includes:       sqlite3.h
   Hs-source-dirs: src
   Ghc-options:    -Wall
+  Cc-options:     -Wall -DSQLITE_ENABLE_FTS3=1 -O3 -DNDEBUG=1 -Wno-unused-value
 
   Exposed-modules:
     Database.Sqroll
@@ -43,11 +46,9 @@ Library
     text                 >= 0.11 && < 0.12,
     template-haskell
 
- Pkgconfig-depends:
-   sqlite3
-
 Test-suite sqroll-tests
-  C-sources:      cbits/sqroll.c
+  C-sources:      cbits/sqroll.c,
+                  cbits/sqlite3.c
   Include-dirs:   cbits
   Ghc-options:    -Wall
   Hs-source-dirs: src tests
@@ -79,7 +80,3 @@ Test-suite sqroll-tests
     unordered-containers >= 0.2 && < 0.3,
     text                 >= 0.11 && < 0.12,
     template-haskell
-
-  -- Pkgconfig-depends doesn't seem to work for test suites?
-  Extra-libraries:
-    sqlite3
