@@ -28,6 +28,8 @@ module Database.Sqroll.Tests.Types
     , HasTuple (..)
     , testHasTuples
 
+    , HasUniqueIndex (..)
+
     , Dog (..)
     , DogKittenWoof (..)
     , DogOwner (..)
@@ -45,6 +47,7 @@ import GHC.Generics (Generic)
 import Database.Sqroll (HasTable (..), Key, aliasTable)
 import Database.Sqroll.Custom
 import Database.Sqroll.Table.Field (Field (..))
+import Database.Sqroll.Table.Field.Unique
 
 data User = User
     { userFirstName :: Text
@@ -107,6 +110,13 @@ instance HasTable HasTuple
 testHasTuples :: [HasTuple]
 testHasTuples = return $ HasTuple (3, "hi") (("foo", 10), True) ("oh", 1, False)
     ("hellllo", 1222, True, "<_<")  (1,2,3,4,5,6,7)
+
+data HasUniqueIndex = HasUniqueIndex
+    { hasUniqueIndexCoords :: Unique (Int, Int)
+    , hasUniqueIndexName   :: Text
+    } deriving (Eq, Generic, Show)
+
+instance HasTable HasUniqueIndex
 
 newtype Dog = Dog {unDog :: Kitten}
     deriving (Eq, Generic, Show)
