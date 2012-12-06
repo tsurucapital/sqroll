@@ -59,8 +59,6 @@ constructQuery sqroll constructedResult = do
                                 , mkOrder (qOrder q)
                                 ]
 
-        putStrLn rawQuery
-
         stmt <- sqlPrepare (sqrollSql sqroll) rawQuery
         void $ withForeignPtr stmt $ \raw -> bindQueryValues r raw 1
         return $ Stmt (stmt, mkPeeker r)
