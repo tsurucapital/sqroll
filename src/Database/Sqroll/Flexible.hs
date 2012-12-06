@@ -127,7 +127,7 @@ data ActiveJoin
 data Exp a where
     RawValue  :: Field a => a -> Exp a
     JustValue :: Field a => a -> Exp (Maybe a)
-    TableExp  :: IsTable full => TableInstance full -> Exp full
+    TableExp  :: TableInstance (NamedTable full) -> Exp full
     DbValue   :: String -> Exp a
     AddExp    :: Exp a -> Exp a -> Exp a
     SubExp    :: Exp a -> Exp a -> Exp a
@@ -160,13 +160,13 @@ data Result f where
 
     -- Primitives
     Constr    :: a -> Result (Exp a)
-    Primitive :: Exp a -> Result (Exp a)
+    Primitive :: Field a => Exp a -> Result (Exp a)
 
 
-(<$.) :: (a -> b) -> Exp a -> Result (Exp b)
+(<$.) :: Field a => (a -> b) -> Exp a -> Result (Exp b)
 (<$.) con e = Constr con <*. e
 
-(<*.) :: Result (Exp (a -> b)) -> Exp a -> Result (Exp b)
+(<*.) :: Field a => Result (Exp (a -> b)) -> Exp a -> Result (Exp b)
 (<*.) f a = App f (Primitive a)
 
 
@@ -174,18 +174,17 @@ data Result f where
 
 data TableInstance t = TableInstance Int deriving Show
 
-(^.) :: (IsTable full, IsTag full tag)
-     => Exp full -> tag -> Exp (Component full tag)
+(^.) :: (IsTag full tag) => Exp full -> tag -> Exp (Component full tag)
 (^.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^.) _ _ = error "WAT"
 
-(^?.) :: (IsTable full, IsTag full tag)
+(^?.) :: (IsTag full tag)
      => Exp (Maybe full) -> tag -> Exp (Maybe (Component full tag))
-(^?.) (TableExp tbl) tag = DbValue (renderTableTagM tbl tag)
+(^?.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^?.) _ _ = error "WAT"
 
 
-grabWhole :: IsTable full => TableInstance full -> Exp full
+grabWhole :: HasTable full => TableInstance full -> Exp full
 grabWhole = error "grab whole is not implemented"
 
 
@@ -193,9 +192,6 @@ type family Component full tag
 
 class IsTag full tag | tag -> full where
     getTagName :: tag -> String
-
-class IsTable t where
-    getTableName :: t -> String
 
 (*.) :: Exp a -> Exp a -> Exp a
 (*.) = MulExp
@@ -298,10 +294,10 @@ class FromMaybe f where
     blankFromInstanceMaybe :: Int -> f
     constructFromMaybe :: f -> ActiveJoin
 
-instance (IsTable t, From j) => From ((Exp t) `InnerJoin` j) where
+instance (HasTable t, From j) => From ((Exp t) `InnerJoin` j) where
     blankFromInstance n = (TableExp $ TableInstance n) `InnerJoin` (blankFromInstance $ n + 1)
     constructFrom ((TableExp ti) `InnerJoin` j) =
-        let joinTableName = getTableName (undefined :: t)
+        let joinTableName = tableName (table :: NamedTable t)
             joinTableAs = renderTableInstance ti
             joinType = "JOIN"
             joinCondition = Nothing
@@ -309,10 +305,10 @@ instance (IsTable t, From j) => From ((Exp t) `InnerJoin` j) where
         in NextJoin {..}
     constructFrom _ = error "WAT"
 
-instance (IsTable t, FromMaybe j) => From ((Exp t) `LeftJoin` j) where
+instance (HasTable t, FromMaybe j) => From ((Exp t) `LeftJoin` j) where
     blankFromInstance n = (TableExp $ TableInstance n) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
     constructFrom ((TableExp ti) `LeftJoin` j) =
-        let joinTableName = getTableName (undefined :: t)
+        let joinTableName = tableName (table :: NamedTable t)
             joinTableAs = renderTableInstance ti
             joinType = "LEFT JOIN"
             joinCondition = Nothing
@@ -320,39 +316,33 @@ instance (IsTable t, FromMaybe j) => From ((Exp t) `LeftJoin` j) where
         in NextJoin {..}
     constructFrom _ = error "WAT"
 
-instance IsTable t => FromMaybe (Exp (Maybe t)) where
+instance HasTable t => FromMaybe (Exp (Maybe t)) where
     blankFromInstanceMaybe n = TableExp $ TableInstance n
     constructFromMaybe (TableExp ti) =
-        let joinTableName = getTableName (undefined :: t)
+        let joinTableName = tableName (table :: NamedTable t)
             joinTableAs = renderTableInstance ti
         in LastJoin {..}
     constructFromMaybe _ = error "WAT"
 
-instance IsTable t => From (Exp t) where
+instance HasTable t => From (Exp t) where
     blankFromInstance n = TableExp $ TableInstance n
     constructFrom (TableExp ti) =
-        let joinTableName = getTableName (undefined :: t)
+        let joinTableName = tableName (table :: NamedTable t)
             joinTableAs = renderTableInstance ti
         in LastJoin {..}
     constructFrom _ = error "WAT"
 
 
 
-instance IsTable t => IsTable (Maybe t) where
-    getTableName _ = getTableName (undefined :: t)
-
-
 
 ----------------------------------------------------------------------
 
-renderTableTag :: (IsTable full, IsTag full tag) => TableInstance full -> tag -> String
-renderTableTag ti tag = concat [ "[", renderTableInstance ti, "].[", getTagName tag, "]" ]
+renderTableTag :: IsTag full tag => TableInstance a -> tag -> String
+renderTableTag ti tag = concat [ renderTableInstance ti, ".[", getTagName tag, "]" ]
 
-renderTableTagM :: (IsTable full, IsTag full tag) => TableInstance (Maybe full) -> tag -> String
-renderTableTagM ti tag = concat [ "[", renderTableInstance ti, "].[", getTagName tag, "]" ]
+renderTableInstance :: TableInstance a -> String
+renderTableInstance (TableInstance tid) = "[t__" ++ show tid ++ "]"
 
-renderTableInstance :: forall full. IsTable full => TableInstance full -> String
-renderTableInstance (TableInstance tid) = "t__" ++ show tid
 
 bindPrim :: Exp v -> SqlStmt -> Int -> IO Int
 bindPrim (RawValue f) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
@@ -453,6 +443,7 @@ infixl 3 <$., <*.
 data TTTT = TTTT { tFoo :: Int, tBar :: Double } deriving (Show, Generic)
 
 instance HasTable TTTT
+
 -- sample result datatype
 data RRRR = RRRR { foo :: Int, bar :: Maybe Double, baz :: Bool } deriving (Eq, Show, Generic)
 instance HasTable RRRR
@@ -469,6 +460,3 @@ type instance Component TTTT Baz = Bool
 instance IsTag TTTT Foo where getTagName _ = "t_foo"
 instance IsTag TTTT Bar where getTagName _ = "t_bar"
 instance IsTag TTTT Baz where getTagName _ = "t_baz"
-
-instance IsTable TTTT where getTableName _ = "tttt"
-

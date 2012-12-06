@@ -234,7 +234,9 @@ testFlexible = withTmpSqroll $ \sqroll -> do
 --        where_ $ var 100 >. (t ^. Bar)
 --        on_ ((t ^. Foo) ==? (r ^?. Foo))
         F.order_ $ F.asc (t F.^. F.Foo)
-        return $ F.RRRR F.<$. (t F.^. F.Foo) F.<*. (r F.^?. F.Bar F.+. F.just 10) F.<*. (F.var True)
+        return $ F.RRRR F.<$. (t F.^. F.Foo)
+                        F.<*. (r F.^?. F.Bar F.+. F.just 10)
+                        F.<*. (r F.^?. F.Foo F.?== t F.^. F.Foo)
 
     result <- sqrollGetList stmt
     [] @=? result
