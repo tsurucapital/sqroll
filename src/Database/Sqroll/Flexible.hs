@@ -17,37 +17,69 @@
 
 module Database.Sqroll.Flexible where
 
+import GHC.Generics (Generic)
 import Control.Monad.Trans
 import Control.Monad.State
 import Data.List (intercalate)
 
+import Database.Sqroll.Table.Field
+import Database.Sqroll.Internal
 import Database.Sqroll.Sqlite3
+
+import Foreign.ForeignPtr
 
 newtype Query r a = Query { runQ :: (StateT (QData r) IO) a }
     deriving (Monad, MonadIO, MonadState (QData r))
 
+{- {{{
 
-constructQuery :: a ~ (Result (Exp t)) => Query a a -> IO (Stmt t)
-constructQuery a = do
-        (r, q) <- runStateT (runQ a) emptyQuery
+TODO:
+http://www.sqlite.org/lang_aggfunc.html
+http://www.sqlite.org/lang_corefunc.html
+http://www.sqlite.org/lang_datefunc.html ?????
 
-        let str = concat $ [ "SELECT ", collectFields r
-                           , " FROM ", compileJoin (qFrom q)
-                           , mkWhere (qWhere q)
-                           , mkOrder (qOrder q)
-                           ]
+GROUP BY
+LIKE ???
 
-        putStrLn $ recPrint r
-        putStrLn str
-        undefined
+
+}}} -}
+
+
+{-
+newtype Stmt a b = Stmt { unStmt :: (SqlFStmt, SqlStmt -> IO (Maybe a)) }
+-}
+
+constructQuery :: (HasTable t, a ~ (Result (Exp t))) => Sqroll -> Query a a -> IO (Stmt t ())
+constructQuery sqroll constructedResult = do
+        (r, q) <- runStateT (runQ constructedResult) emptyQuery
+
+        table' <- prepareTable sqroll Nothing
+
+        let rawQuery = concat $ [ "SELECT 1, ", collectFields r
+                                , " FROM ", compileJoin (qFrom q)
+                                , mkWhere (qWhere q)
+                                , mkOrder (qOrder q)
+                                ]
+
+        putStrLn rawQuery
+
+        stmt <- sqlPrepare (sqrollSql sqroll) rawQuery
+        void $ withForeignPtr stmt $ \raw -> bindQueryValues r raw 1
+        return $ Stmt (stmt, mkSelectPeek table')
     where
+
+        bindQueryValues :: Result (Exp t) -> SqlStmt -> Int -> IO Int
+        bindQueryValues (App a b) s n = bindQueryValues a s n >>= bindQueryValues b s
+        bindQueryValues Constr {} _ n = return n
+        bindQueryValues (Primitive p) s n = bindPrim p s n
+
         mkWhere :: [String] -> String
         mkWhere [] = []
         mkWhere conds = " WHERE " ++ intercalate " AND " conds
 
         mkOrder :: [String] -> String
         mkOrder [] = []
-        mkOrder conds = " ORDER " ++ intercalate " , " conds
+        mkOrder conds = " ORDER BY " ++ intercalate " , " conds
 
 
 collectFields :: Result (Exp t) -> String
@@ -128,7 +160,7 @@ data Result f where
 
     -- Primitives
     Constr    :: a -> Result (Exp a)
-    Primitive :: a -> Result a
+    Primitive :: Exp a -> Result (Exp a)
 
 
 (<$.) :: (a -> b) -> Exp a -> Result (Exp b)
@@ -138,9 +170,6 @@ data Result f where
 (<*.) f a = App f (Primitive a)
 
 
-
-
-newtype Stmt a = Stmt a
 
 
 data TableInstance t = TableInstance Int deriving Show
@@ -203,16 +232,6 @@ var = RawValue
 just :: Field a => a -> Exp (Maybe a)
 just = JustValue
 
-
-class Field a where
-    renderValue :: a -> String
-
-{-
-select :: Query a -> IO a
-select r = do
-    (q', _s') <- runStateT r undefined
-    return q'
--}
 
 compileJoin :: ActiveJoin -> String
 compileJoin = compileJoinR True
@@ -327,18 +346,33 @@ instance IsTable t => IsTable (Maybe t) where
 ----------------------------------------------------------------------
 
 renderTableTag :: (IsTable full, IsTag full tag) => TableInstance full -> tag -> String
-renderTableTag ti tag = concat [ "[", renderTableInstance ti, ".", getTagName tag, "]" ]
+renderTableTag ti tag = concat [ "[", renderTableInstance ti, "].[", getTagName tag, "]" ]
 
 renderTableTagM :: (IsTable full, IsTag full tag) => TableInstance (Maybe full) -> tag -> String
-renderTableTagM ti tag = concat [ "[", renderTableInstance ti, ".", getTagName tag, "]" ]
+renderTableTagM ti tag = concat [ "[", renderTableInstance ti, "].[", getTagName tag, "]" ]
 
 renderTableInstance :: forall full. IsTable full => TableInstance full -> String
 renderTableInstance (TableInstance tid) = "t__" ++ show tid
 
+bindPrim :: Exp v -> SqlStmt -> Int -> IO Int
+bindPrim (RawValue f) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
+bindPrim (JustValue f) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
+bindPrim DbValue{} _ n = return n
+bindPrim (AddExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (SubExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (MulExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (DivExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (CmpExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (Cmp_MExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (CmpMMExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (CmpM_Exp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (GtExp a b) s n = bindPrim a s n >>= bindPrim b s
+bindPrim (DirExp _ a) s n = bindPrim a s n
+bindPrim (TableExp _t) _ _ = error "TODO: bind full table"
 
 renderPrim :: Exp v -> String
-renderPrim (RawValue a) = concat ["(", renderValue a, ")"]
-renderPrim (JustValue a) = concat ["(", renderValue a, ")"]
+renderPrim (RawValue a) = intercalate "," (map (const "?") $ fieldTypes a)
+renderPrim (JustValue a) = intercalate "," (map (const "?") $ fieldTypes a)
 renderPrim (DbValue a) = a
 renderPrim (AddExp e1 e2) = renderAct e1 e2 "+"
 renderPrim (SubExp e1 e2) = renderAct e1 e2 "-"
@@ -360,7 +394,7 @@ renderAct e1 e2 s = concat ["(", renderPrim e1, s, renderPrim e2, ")"]
 
 createStmt :: IO ()
 createStmt = do
-    _ <- constructQuery $ do
+    _ <- constructQuery undefined $ do
         t `LeftJoin` r <- from
         where_ $ (r ^?. Bar) >. just 100
         where_ $ var 100 >. (t ^. Bar)
@@ -371,36 +405,39 @@ createStmt = do
 
 createStmt2 :: IO ()
 createStmt2 = do
-    _ <- constructQuery $ do
+    _ <- constructQuery undefined $ do
         t1 `InnerJoin` t2 `InnerJoin` t3 <- from
         on_ ((t1 ^. Foo) ==. (t2 ^. Foo))
         on_ ((t2 ^. Foo) ==. (t3 ^. Foo))
-        return $ (,,) <$. (t1 ^. Foo) <*. (t2 ^. Foo) <*. (t3 ^. Foo)
+        return $ Intx3 <$. (t1 ^. Foo) <*. (t2 ^. Foo) <*. (t3 ^. Foo)
     return ()
 
-
+{-
 createStmt3 :: IO ()
 createStmt3 = do
-    _ <- constructQuery $ do
+    _ <- constructQuery undefined $ do
         (t1 :: Exp TTTT) <- from
         return $ id <$. t1
     return ()
-
+-}
 
 createStmt4 :: IO ()
 createStmt4 = do
-    _ <- constructQuery $ do
+    _ <- constructQuery undefined $ do
         t1 `InnerJoin` t2 `InnerJoin` t3 `InnerJoin` t4 `InnerJoin` t5 `InnerJoin` t6 <- from
         on_ ((t5 ^. Foo) ==. (t6 ^. Foo))
         on_ ((t4 ^. Foo) ==. (t5 ^. Foo))
         on_ ((t3 ^. Foo) ==. (t4 ^. Foo))
         on_ ((t2 ^. Foo) ==. (t3 ^. Foo))
         on_ ((t1 ^. Foo) ==. (t2 ^. Foo))
-        return $ (,,,,,) <$.  (t1 ^. Foo) <*. (t2 ^. Foo) <*. (t3 ^. Foo) <*. (t4 ^. Foo) <*. (t5 ^. Foo) <*. (t6 ^. Foo)
+        return $ Intx6 <$.  (t1 ^. Foo) <*. (t2 ^. Foo) <*. (t3 ^. Foo) <*. (t4 ^. Foo) <*. (t5 ^. Foo) <*. (t6 ^. Foo)
     return ()
 
+data Intx3 = Intx3 Int Int Int deriving (Generic)
+instance HasTable Intx3
 
-
+data Intx6 = Intx6 Int Int Int Int Int Int deriving (Generic)
+instance HasTable Intx6
 
 
 
@@ -412,19 +449,13 @@ infixl 6 +., -.
 infixl 4 ==., >., ?==?, ?==, ==?
 infixl 3 <$., <*.
 
-
-instance Field Double where
-    renderValue = show
-
-instance Field Bool where
-    renderValue False = "0"
-    renderValue True = "1"
-
 -- sample table in the db
-data TTTT = TTTT { tFoo :: Int, tBar :: Double } deriving (Show)
+data TTTT = TTTT { tFoo :: Int, tBar :: Double } deriving (Show, Generic)
 
+instance HasTable TTTT
 -- sample result datatype
-data RRRR = RRRR { foo :: Int, bar :: Maybe Double, baz :: Bool }
+data RRRR = RRRR { foo :: Int, bar :: Maybe Double, baz :: Bool } deriving (Eq, Show, Generic)
+instance HasTable RRRR
 
 data Foo = Foo
 data Bar = Bar
@@ -435,9 +466,9 @@ type instance Component TTTT Bar = Double
 type instance Component TTTT Baz = Bool
 
 
-instance IsTag TTTT Foo where getTagName _ = "foo"
-instance IsTag TTTT Bar where getTagName _ = "bar"
-instance IsTag TTTT Baz where getTagName _ = "baz"
+instance IsTag TTTT Foo where getTagName _ = "t_foo"
+instance IsTag TTTT Bar where getTagName _ = "t_bar"
+instance IsTag TTTT Baz where getTagName _ = "t_baz"
 
 instance IsTable TTTT where getTableName _ = "tttt"
 

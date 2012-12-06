@@ -14,6 +14,7 @@ import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
 
 import Database.Sqroll
+import qualified Database.Sqroll.Flexible as F
 import qualified Database.Sqroll.Tests.ModifiedTypes as ModifiedTypes
 import Database.Sqroll.Table
 import Database.Sqroll.Tests.Types
@@ -39,6 +40,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testRebindKey"       testRebindKey
     , testCase "testCustomQuery"     testCustomQuery
     , testCase "testCustomQueryNT"   testCustomQueryNT
+    , testCase "testFlexible"        testFlexible
     ]
 
 testAppendTailUsers :: Assertion
@@ -219,3 +221,20 @@ testCustomQueryNT = withTmpSqroll $ \sqroll -> do
     cat' <- makeCustomSelectStatement sqroll Nothing condC >>= sqrollGetList
 
     ([last dogs], [head cats]) @=? (dog', cat')
+
+testFlexible :: Assertion
+testFlexible = withTmpSqroll $ \sqroll -> do
+
+    sqrollAppend_ sqroll $ F.TTTT 1   1.0
+    sqrollAppend_ sqroll $ F.TTTT 100 100.0
+
+    stmt <- F.constructQuery sqroll $ do
+        t `F.LeftJoin` r <- F.from
+--        where_ $ (r ^?. Bar) >. just 100
+--        where_ $ var 100 >. (t ^. Bar)
+--        on_ ((t ^. Foo) ==? (r ^?. Foo))
+        F.order_ $ F.asc (t F.^. F.Foo)
+        return $ F.RRRR F.<$. (t F.^. F.Foo) F.<*. (r F.^?. F.Bar F.+. F.just 10) F.<*. (F.var True)
+
+    result <- sqrollGetList stmt
+    [] @=? result
