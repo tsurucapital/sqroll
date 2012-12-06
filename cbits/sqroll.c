@@ -1,4 +1,4 @@
-#include <sqroll.h>
+#include "sqroll.h"
 
 int sqroll_finalize_stmt(sqlite3_stmt *stmt) {
     sqlite3 *db = sqlite3_db_handle(stmt);
