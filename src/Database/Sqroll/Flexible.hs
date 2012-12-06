@@ -49,13 +49,11 @@ LIKE ???
 newtype Stmt a b = Stmt { unStmt :: (SqlFStmt, SqlStmt -> IO (Maybe a)) }
 -}
 
-constructQuery :: (HasTable t, a ~ (Result (Exp t))) => Sqroll -> Query a a -> IO (Stmt t ())
+constructQuery :: a ~ (Result (Exp t)) => Sqroll -> Query a a -> IO (Stmt t ())
 constructQuery sqroll constructedResult = do
         (r, q) <- runStateT (runQ constructedResult) emptyQuery
 
-        table' <- prepareTable sqroll Nothing
-
-        let rawQuery = concat $ [ "SELECT 1, ", collectFields r
+        let rawQuery = concat $ [ "SELECT ", collectFields r
                                 , " FROM ", compileJoin (qFrom q)
                                 , mkWhere (qWhere q)
                                 , mkOrder (qOrder q)
@@ -65,7 +63,7 @@ constructQuery sqroll constructedResult = do
 
         stmt <- sqlPrepare (sqrollSql sqroll) rawQuery
         void $ withForeignPtr stmt $ \raw -> bindQueryValues r raw 1
-        return $ Stmt (stmt, mkSelectPeek table')
+        return $ Stmt (stmt, mkPeeker r)
     where
 
         bindQueryValues :: Result (Exp t) -> SqlStmt -> Int -> IO Int
@@ -80,6 +78,25 @@ constructQuery sqroll constructedResult = do
         mkOrder :: [String] -> String
         mkOrder [] = []
         mkOrder conds = " ORDER BY " ++ intercalate " , " conds
+
+        mkPeeker :: Result (Exp t) -> SqlStmt -> IO (Maybe t)
+        mkPeeker r stmt = do
+                hasData <- sqlStep stmt
+                result <- if hasData
+                    then (Just . fst) `fmap` selectPeek r stmt 0
+                    else do sqlReset stmt
+                            return Nothing
+                return result
+
+        selectPeek :: Result (Exp t) -> SqlStmt -> Int -> IO (t, Int)
+        selectPeek (App a b) stmt n = do
+            (ar, n') <- selectPeek a stmt n
+            (br, n'') <- selectPeek b stmt n'
+            return (ar br , n'')
+        selectPeek (Primitive _) stmt n = do
+            p <- fieldPeek stmt n
+            return (p, n + length (fieldTypes p))
+        selectPeek (Constr c) _ n = return (c, n)
 
 
 collectFields :: Result (Exp t) -> String
@@ -445,8 +462,7 @@ data TTTT = TTTT { tFoo :: Int, tBar :: Double } deriving (Show, Generic)
 instance HasTable TTTT
 
 -- sample result datatype
-data RRRR = RRRR { foo :: Int, bar :: Maybe Double, baz :: Bool } deriving (Eq, Show, Generic)
-instance HasTable RRRR
+data RRRR = RRRR { foo :: Int, bar :: Maybe Double, baz :: Bool } deriving (Eq, Show)
 
 data Foo = Foo
 data Bar = Bar

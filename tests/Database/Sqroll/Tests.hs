@@ -239,4 +239,9 @@ testFlexible = withTmpSqroll $ \sqroll -> do
                         F.<*. (r F.^?. F.Foo F.?== t F.^. F.Foo)
 
     result <- sqrollGetList stmt
-    [] @=? result
+    let expected = [ F.RRRR 1   (Just 11.0)  True
+                   , F.RRRR 1   (Just 110.0) False
+                   , F.RRRR 100 (Just 11.0)  False
+                   , F.RRRR 100 (Just 110.0) True
+                   ]
+    expected @=? result
