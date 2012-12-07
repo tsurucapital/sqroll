@@ -53,6 +53,8 @@ constructQuery sqroll constructedResult = do
         let rawQuery = concat $ [ "SELECT ", collectFields r
                                 , " FROM ", compileJoin (qFrom q)
                                 , mkWhere (qWhere q)
+                                , mkGroup (qGroup q)
+                                , mkHaving (qHaving q)
                                 , mkOrder (qOrder q)
                                 ]
 
@@ -69,6 +71,16 @@ constructQuery sqroll constructedResult = do
         mkWhere :: [String] -> String
         mkWhere [] = []
         mkWhere conds = " WHERE " ++ intercalate " AND " conds
+
+        mkHaving :: [String] -> String
+        mkHaving [] = []
+        mkHaving conds = " HAVING " ++ intercalate " AND " conds
+
+
+        mkGroup :: [String] -> String
+        mkGroup [] = []
+        mkGroup conds = " GROUP BY " ++ intercalate " , " conds
+
 
         mkOrder :: [String] -> String
         mkOrder [] = []
@@ -107,12 +119,16 @@ emptyQuery = QData {..}
         qFrom = error "From was not specified yet"
         qWhere = []
         qOrder = []
+        qHaving = []
+        qGroup = []
 
 data QData r = QData
     { qResult :: Result r
     , qFrom :: ActiveJoin
     , qWhere :: [String]
     , qOrder :: [String]
+    , qHaving :: [String]
+    , qGroup :: [String]
     }
 
 data ActiveJoin
@@ -257,6 +273,13 @@ where_ cond = modify $ \s -> s { qWhere = renderPrim cond : qWhere s }
 
 order_ :: Exp Dir -> Query r ()
 order_ cond = modify $ \s -> s { qOrder = renderPrim cond : qOrder s }
+
+having_ :: Exp Bool -> Query r ()
+having_ cond = modify $ \s -> s { qHaving = renderPrim cond : qHaving s }
+
+group_ :: Exp Bool -> Query r ()
+group_ cond = modify $ \s -> s { qGroup = renderPrim cond : qGroup s }
+
 
 
 data Dir = Asc | Desc
