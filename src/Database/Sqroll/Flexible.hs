@@ -5,7 +5,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -194,23 +193,24 @@ data Result f where
 
 data TableInstance t = TableInstance Int deriving Show
 
-(^.) :: (IsTag full tag) => Exp full -> tag -> Exp (Component full tag)
+(^.) :: (IsTag tag) => Exp Full -> tag -> Exp (Component Full tag)
 (^.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^.) _ _ = error "WAT"
 
-(^?.) :: (IsTag full tag)
-     => Exp (Maybe full) -> tag -> Exp (Maybe (Component full tag))
+(^?.) :: (IsTag tag)
+     => Exp (Maybe Full) -> tag -> Exp (Maybe (Component Full tag))
 (^?.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^?.) _ _ = error "WAT"
 
 
-grabWhole :: HasTable full => TableInstance full -> Exp full
+grabWhole :: HasTable Full => TableInstance Full -> Exp Full
 grabWhole = error "grab whole is not implemented"
 
 
 type family Component full tag
 
-class IsTag full tag | tag -> full where
+class IsTag tag where
+    type Full
     getTagName :: tag -> String
 
 (*.) :: Exp a -> Exp a -> Exp a
@@ -386,7 +386,7 @@ instance HasTable t => From (Exp t) where
 
 ----------------------------------------------------------------------
 
-renderTableTag :: IsTag full tag => TableInstance a -> tag -> String
+renderTableTag :: IsTag tag => TableInstance a -> tag -> String
 renderTableTag ti tag = concat [ renderTableInstance ti, ".[", getTagName tag, "]" ]
 
 renderTableInstance :: TableInstance a -> String
@@ -524,6 +524,14 @@ type instance Component TTTT Bar = Double
 type instance Component TTTT Baz = Bool
 
 
-instance IsTag TTTT Foo where getTagName _ = "t_foo"
-instance IsTag TTTT Bar where getTagName _ = "t_bar"
-instance IsTag TTTT Baz where getTagName _ = "t_baz"
+instance IsTag Foo where
+    type Full = TTTT
+    getTagName _ = "t_foo"
+
+instance IsTag Bar where
+    type Full = TTTT
+    getTagName _ = "t_bar"
+
+instance IsTag Baz where
+    type Full = TTTT
+    getTagName _ = "t_baz"
