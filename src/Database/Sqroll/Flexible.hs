@@ -165,12 +165,14 @@ data Exp a where
     GtExp     :: Exp a -> Exp a -> Exp Bool
 
     DirExp    :: Dir -> Exp a -> Exp Dir
-{-
-    MaxExp   :: Num a => Exp a -> Exp a
-    SumExp   :: Num a => Exp a -> Exp a
-    MinExp   :: Num a => Exp a -> Exp a
-    CntExp   :: Exp a -> Exp Int
--}
+
+    AvgExp   :: Exp a -> Exp a
+    CountExp :: Exp a -> Exp Int
+    MaxExp   :: Exp a -> Exp a
+    MinExp   :: Exp a -> Exp a
+    SumExp   :: Exp a -> Exp a
+    TotalExp :: Exp a -> Exp Double
+
 
 data Result f where
     -- Applicative interface
@@ -406,6 +408,12 @@ bindPrim (CmpM_Exp a b) s n = bindPrim a s n >>= bindPrim b s
 bindPrim (GtExp a b) s n = bindPrim a s n >>= bindPrim b s
 bindPrim (DirExp _ a) s n = bindPrim a s n
 bindPrim (TableExp _t) _ _ = error "TODO: bind full table"
+bindPrim (AvgExp t) s n = bindPrim t s n
+bindPrim (CountExp t) s n = bindPrim t s n
+bindPrim (MaxExp t) s n = bindPrim t s n
+bindPrim (MinExp t) s n = bindPrim t s n
+bindPrim (SumExp t) s n = bindPrim t s n
+bindPrim (TotalExp t) s n = bindPrim t s n
 
 renderPrim :: Exp v -> String
 renderPrim (RawValue a) = intercalate "," (map (const "?") $ fieldTypes a)
@@ -423,6 +431,12 @@ renderPrim (GtExp  e1 e2) = renderAct e1 e2 ">"
 renderPrim (DirExp Asc e) = concat ["(", renderPrim e,  ") ASC"]
 renderPrim (DirExp Desc e) = concat ["(", renderPrim e,  ") DESC"]
 renderPrim (TableExp _t) = error "TODO: render and bind full set of fields"
+renderPrim (AvgExp t) = concat ["AVG (", renderPrim t, ")"]
+renderPrim (CountExp t) = concat ["COUNT (", renderPrim t, ")"]
+renderPrim (MaxExp t) = concat ["MAX (", renderPrim t, ")"]
+renderPrim (MinExp t) = concat ["MIN (", renderPrim t, ")"]
+renderPrim (SumExp t) = concat ["SUM (", renderPrim t, ")"]
+renderPrim (TotalExp t) = concat ["TOTAL (", renderPrim t, ")"]
 
 renderAct :: Exp v1 -> Exp v2 -> String -> String
 renderAct e1 e2 s = concat ["(", renderPrim e1, s, renderPrim e2, ")"]
