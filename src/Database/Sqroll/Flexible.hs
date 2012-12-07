@@ -45,9 +45,6 @@ LIKE ???
 }}} -}
 
 
-{-
-newtype Stmt a b = Stmt { unStmt :: (SqlFStmt, SqlStmt -> IO (Maybe a)) }
--}
 
 constructQuery :: a ~ (Result (Exp t)) => Sqroll -> Query a a -> IO (Stmt t ())
 constructQuery sqroll constructedResult = do
@@ -102,12 +99,6 @@ collectFields (App Constr{} a) = collectFields a
 collectFields (App a b) = concat [collectFields a, ", ", collectFields b]
 collectFields (Primitive p) = renderPrim p
 collectFields Constr{} = error "WAT"
-
-recPrint :: Result (Exp t) -> String
-recPrint (App a b) = concat ["App (",  recPrint a, ") (", recPrint b, ")"]
-recPrint (Constr _) = "Constr _"
-recPrint (Primitive p) = concat ["Primitive (", renderPrim p, ")"]
-
 
 emptyQuery :: QData r
 emptyQuery = QData {..}
@@ -167,10 +158,6 @@ data Exp a where
 
 data Result f where
     -- Applicative interface
-    {-
-    Map  :: (a -> b) -> Result r a -> Result r b
-    Pure :: a -> Result r a
-    -}
     App  :: Result (Exp (a -> b)) -> Result (Exp a) -> Result (Exp b)
 
     -- Primitives
