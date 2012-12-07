@@ -331,6 +331,28 @@ instance (HasTable t, FromMaybe j) => From ((Exp t) `LeftJoin` j) where
         in NextJoin {..}
     constructFrom _ = error "WAT"
 
+instance (HasTable t, FromMaybe j) => FromMaybe ((Exp (Maybe t)) `LeftJoin` j) where
+    blankFromInstanceMaybe n = (TableExp $ TableInstance n) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
+    constructFromMaybe ((TableExp ti) `LeftJoin` j) =
+        let joinTableName = tableName (table :: NamedTable t)
+            joinTableAs = renderTableInstance ti
+            joinType = "LEFT JOIN"
+            joinCondition = Nothing
+            joinTo = constructFromMaybe j
+        in NextJoin {..}
+    constructFromMaybe _ = error "WAT"
+
+instance (HasTable t, FromMaybe j) => FromMaybe ((Exp (Maybe t)) `InnerJoin` j) where
+    blankFromInstanceMaybe n = (TableExp $ TableInstance n) `InnerJoin` (blankFromInstanceMaybe $ n + 1)
+    constructFromMaybe ((TableExp ti) `InnerJoin` j) =
+        let joinTableName = tableName (table :: NamedTable t)
+            joinTableAs = renderTableInstance ti
+            joinType = "JOIN"
+            joinCondition = Nothing
+            joinTo = constructFromMaybe j
+        in NextJoin {..}
+    constructFromMaybe _ = error "WAT"
+
 instance HasTable t => FromMaybe (Exp (Maybe t)) where
     blankFromInstanceMaybe n = TableExp $ TableInstance n
     constructFromMaybe (TableExp ti) =
@@ -436,6 +458,13 @@ createStmt4 = do
         on_ ((t2 ^. Foo) ==. (t3 ^. Foo))
         on_ ((t1 ^. Foo) ==. (t2 ^. Foo))
         return $ Intx6 <$.  (t1 ^. Foo) <*. (t2 ^. Foo) <*. (t3 ^. Foo) <*. (t4 ^. Foo) <*. (t5 ^. Foo) <*. (t6 ^. Foo)
+    return ()
+
+createStmt5 :: IO ()
+createStmt5 = do
+    _ <- constructQuery undefined $ do
+        t1 `LeftJoin` t2 `LeftJoin` t3 `InnerJoin` t4 <- from
+        return $ (,,,) <$. (t1 ^. Foo) <*. (t2 ^?. Foo) <*. (t3 ^?. Foo) <*. t4 ^?. Foo
     return ()
 
 data Intx3 = Intx3 Int Int Int deriving (Generic)
