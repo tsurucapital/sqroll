@@ -5,6 +5,7 @@ import qualified Database.Sqroll.Sqlite3.Tests
 import qualified Database.Sqroll.Table.Naming.Tests
 import qualified Database.Sqroll.TH.Tests
 import qualified Database.Sqroll.Tests
+import qualified Database.Sqroll.Flexible.Tests
 
 main :: IO ()
 main = defaultMain
@@ -13,4 +14,5 @@ main = defaultMain
     , Database.Sqroll.Table.Naming.Tests.tests
     , Database.Sqroll.TH.Tests.tests
     , Database.Sqroll.Tests.tests
+    , Database.Sqroll.Flexible.Tests.tests
     ]
