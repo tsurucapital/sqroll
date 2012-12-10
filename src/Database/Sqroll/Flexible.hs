@@ -17,7 +17,7 @@
 module Database.Sqroll.Flexible where
 
 import GHC.Generics (Generic)
-import Control.Monad.Trans
+import Control.Applicative (Applicative (..), (<$>))
 import Control.Monad.State
 import Data.List (intercalate)
 
@@ -27,8 +27,8 @@ import Database.Sqroll.Sqlite3
 
 import Foreign.ForeignPtr
 
-newtype Query r a = Query { runQ :: (StateT (QData r) IO) a }
-    deriving (Monad, MonadIO, MonadState (QData r))
+newtype Query r a = Query { runQ :: State (QData r) a }
+    deriving (Monad, MonadState (QData r))
 
 {- {{{
 
@@ -45,11 +45,11 @@ LIKE ???
 
 
 
-constructQuery :: a ~ (Result (Exp t)) => Sqroll -> Query a a -> IO (Stmt t ())
+constructQuery :: a ~ (Exp HaskTag t) => Sqroll -> Query a a -> IO (Stmt t ())
 constructQuery sqroll constructedResult = do
-        (r, q) <- runStateT (runQ constructedResult) emptyQuery
+        let (r, q) = runState (runQ constructedResult) emptyQuery
 
-        let rawQuery = concat $ [ "SELECT ", collectFields r
+            rawQuery = concat $ [ "SELECT ", intercalate ", " (collectFields r)
                                 , " FROM ", compileJoin (qFrom q)
                                 , mkWhere (qWhere q)
                                 , mkGroup (qGroup q)
@@ -57,16 +57,12 @@ constructQuery sqroll constructedResult = do
                                 , mkOrder (qOrder q)
                                 ]
 
+        putStrLn rawQuery
+
         stmt <- sqlPrepare (sqrollSql sqroll) rawQuery
-        void $ withForeignPtr stmt $ \raw -> bindQueryValues r raw 1
+        void $ withForeignPtr stmt $ \raw -> bindExp r raw 1
         return $ Stmt (stmt, mkPeeker r)
     where
-
-        bindQueryValues :: Result (Exp t) -> SqlStmt -> Int -> IO Int
-        bindQueryValues (App a b) s n = bindQueryValues a s n >>= bindQueryValues b s
-        bindQueryValues Constr {} _ n = return n
-        bindQueryValues (Primitive p) s n = bindPrim p s n
-
         mkWhere :: [String] -> String
         mkWhere [] = []
         mkWhere conds = " WHERE " ++ intercalate " AND " conds
@@ -85,7 +81,7 @@ constructQuery sqroll constructedResult = do
         mkOrder [] = []
         mkOrder conds = " ORDER BY " ++ intercalate " , " conds
 
-        mkPeeker :: Result (Exp t) -> SqlStmt -> IO (Maybe t)
+        mkPeeker :: Exp HaskTag t -> SqlStmt -> IO (Maybe t)
         mkPeeker r stmt = do
                 hasData <- sqlStep stmt
                 result <- if hasData
@@ -94,27 +90,50 @@ constructQuery sqroll constructedResult = do
                             return Nothing
                 return result
 
-        selectPeek :: Result (Exp t) -> SqlStmt -> Int -> IO (t, Int)
+        selectPeek :: Exp HaskTag t -> SqlStmt -> Int -> IO (t, Int)
+        selectPeek (Pure x) _ n = return (x, n)
         selectPeek (App a b) stmt n = do
-            (ar, n') <- selectPeek a stmt n
+            (ar, n')  <- selectPeek a stmt n
             (br, n'') <- selectPeek b stmt n'
             return (ar br , n'')
-        selectPeek (Primitive _) stmt n = do
-            p <- fieldPeek stmt n
-            return (p, n + length (fieldTypes p))
-        selectPeek (Constr c) _ n = return (c, n)
+        selectPeek (RawValue x) _ n = return (x, n)
+        selectPeek (JustValue x) _ n = return (Just x, n)
+        selectPeek (TableExp _ti) _ _n = error "TODO: peek whole table?"
+        -- All other Exps are peekable as fields...
+        selectPeek _ _stmt _n = do
+            -- We still need a field constraint here somewhere...
+            -- p <- fieldPeek stmt n
+            -- return (p, n + length (fieldTypes p))
+            undefined
 
 
-collectFields :: Result (Exp t) -> String
-collectFields (App Constr{} a) = collectFields a
-collectFields (App a b) = concat [collectFields a, ", ", collectFields b]
-collectFields (Primitive p) = renderPrim p
-collectFields Constr{} = error "WAT"
+collectFields :: Exp t a -> [String]
+collectFields (Pure _)  = []
+collectFields (App a b) = collectFields a ++ collectFields b
+collectFields (RawValue f) = [renderPrim (RawValue f)]
+collectFields (JustValue f) = [renderPrim (JustValue f)]
+collectFields (TableExp ti) = [renderPrim (TableExp ti)]
+collectFields (DbValue s) = [renderPrim (DbValue s)]
+collectFields (AddExp a b) = [renderPrim (AddExp a b)]
+collectFields (SubExp a b) = [renderPrim (SubExp a b)]
+collectFields (DivExp a b) = [renderPrim (DivExp a b)]
+collectFields (MulExp a b) = [renderPrim (MulExp a b)]
+collectFields (CmpExp a b) = [renderPrim (CmpExp a b)]
+collectFields (CmpM_Exp a b) = [renderPrim (CmpM_Exp a b)]
+collectFields (Cmp_MExp a b) = [renderPrim (Cmp_MExp a b)]
+collectFields (CmpMMExp a b) = [renderPrim (CmpMMExp a b)]
+collectFields (GtExp a b) = [renderPrim (GtExp a b)]
+collectFields (DirExp a b) = [renderPrim (DirExp a b)]
+collectFields (AvgExp a) = [renderPrim (AvgExp a)]
+collectFields (CountExp a) = [renderPrim (CountExp a)]
+collectFields (MaxExp a) = [renderPrim (MaxExp a)]
+collectFields (MinExp a) = [renderPrim (MinExp a)]
+collectFields (SumExp a) = [renderPrim (SumExp a)]
+collectFields (TotalExp a) = [renderPrim (TotalExp a)]
 
 emptyQuery :: QData r
 emptyQuery = QData {..}
     where
-        qResult = error "Result was not created yet"
         qFrom = error "From was not specified yet"
         qWhere = []
         qOrder = []
@@ -122,8 +141,7 @@ emptyQuery = QData {..}
         qGroup = []
 
 data QData r = QData
-    { qResult :: Result r
-    , qFrom :: ActiveJoin
+    { qFrom :: ActiveJoin
     , qWhere :: [String]
     , qOrder :: [String]
     , qHaving :: [String]
@@ -143,67 +161,59 @@ data ActiveJoin
     , joinTableAs   :: String
     } deriving (Show)
 
+data SqlTag
+data HaskTag
 
+data Exp t a where
+    RawValue  :: Field a => a -> Exp t a
+    JustValue :: Field a => a -> Exp t (Maybe a)
+    TableExp  :: TableInstance (NamedTable full) -> Exp t full
+    DbValue   :: String -> Exp t a
+    AddExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+    SubExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+    DivExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+    MulExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
 
-data Exp a where
-    RawValue  :: Field a => a -> Exp a
-    JustValue :: Field a => a -> Exp (Maybe a)
-    TableExp  :: TableInstance (NamedTable full) -> Exp full
-    DbValue   :: String -> Exp a
-    AddExp    :: Exp a -> Exp a -> Exp a
-    SubExp    :: Exp a -> Exp a -> Exp a
-    DivExp    :: Exp a -> Exp a -> Exp a
-    MulExp    :: Exp a -> Exp a -> Exp a
+    CmpExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 
-    CmpExp    :: Exp a -> Exp a -> Exp Bool
+    CmpM_Exp    :: Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
+    Cmp_MExp    :: Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
+    CmpMMExp    :: Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
 
-    CmpM_Exp    :: Exp (Maybe a) -> Exp a -> Exp Bool
-    Cmp_MExp    :: Exp a -> Exp (Maybe a) -> Exp Bool
-    CmpMMExp    :: Exp (Maybe a) -> Exp (Maybe a) -> Exp Bool
+    GtExp     :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 
-    GtExp     :: Exp a -> Exp a -> Exp Bool
+    DirExp    :: Dir -> Exp SqlTag a -> Exp t Dir
 
-    DirExp    :: Dir -> Exp a -> Exp Dir
+    AvgExp   :: Exp SqlTag a -> Exp t a
+    CountExp :: Exp SqlTag a -> Exp t Int
+    MaxExp   :: Exp SqlTag a -> Exp t a
+    MinExp   :: Exp SqlTag a -> Exp t a
+    SumExp   :: Exp SqlTag a -> Exp t a
+    TotalExp :: Exp SqlTag a -> Exp t Double
 
-    AvgExp   :: Exp a -> Exp a
-    CountExp :: Exp a -> Exp Int
-    MaxExp   :: Exp a -> Exp a
-    MinExp   :: Exp a -> Exp a
-    SumExp   :: Exp a -> Exp a
-    TotalExp :: Exp a -> Exp Double
+    Pure :: a -> Exp HaskTag a
+    App  :: Exp HaskTag (a -> b) -> Exp HaskTag a -> Exp HaskTag b
 
+instance Functor (Exp HaskTag) where
+    fmap f e = Pure f `App` e
 
-data Result f where
-    -- Applicative interface
-    App  :: Result (Exp (a -> b)) -> Result (Exp a) -> Result (Exp b)
-
-    -- Primitives
-    Constr    :: a -> Result (Exp a)
-    Primitive :: Field a => Exp a -> Result (Exp a)
-
-
-(<$.) :: Field a => (a -> b) -> Exp a -> Result (Exp b)
-(<$.) con e = Constr con <*. e
-
-(<*.) :: Field a => Result (Exp (a -> b)) -> Exp a -> Result (Exp b)
-(<*.) f a = App f (Primitive a)
-
-
-
+instance Applicative (Exp HaskTag) where
+    pure  = Pure
+    (<*>) = App
 
 data TableInstance t = TableInstance Int deriving Show
 
-(^.) :: (IsTag tag) => Exp Full -> tag -> Exp (Component Full tag)
+(^.) :: (IsTag tag) => Exp SqlTag Full -> tag -> Exp t (Component Full tag)
 (^.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^.) _ _ = error "WAT"
 
 (^?.) :: (IsTag tag)
-     => Exp (Maybe Full) -> tag -> Exp (Maybe (Component Full tag))
+     => Exp SqlTag (Maybe Full) -> tag -> Exp t (Maybe (Component Full tag))
 (^?.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^?.) _ _ = error "WAT"
 
 
-grabWhole :: HasTable Full => TableInstance Full -> Exp Full
+grabWhole :: HasTable Full => TableInstance Full -> Exp t Full
 grabWhole = error "grab whole is not implemented"
 
 
@@ -213,39 +223,39 @@ class IsTag tag where
     type Full
     getTagName :: tag -> String
 
-(*.) :: Exp a -> Exp a -> Exp a
+(*.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (*.) = MulExp
 
-(+.) :: Exp a -> Exp a -> Exp a
+(+.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (+.) = AddExp
 
-(/.) :: Exp a -> Exp a -> Exp a
+(/.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (/.) = DivExp
 
-(-.) :: Exp a -> Exp a -> Exp a
+(-.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (-.) = SubExp
 
-(==.) :: Exp a -> Exp a -> Exp Bool
+(==.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 (==.) = CmpExp
 
-(==?) :: Exp a -> Exp (Maybe a) -> Exp Bool
+(==?) :: Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
 (==?) = Cmp_MExp
 
-(?==) :: Exp (Maybe a) -> Exp a -> Exp Bool
+(?==) :: Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
 (?==) = CmpM_Exp
 
-(?==?) :: Exp (Maybe a) -> Exp (Maybe a) -> Exp Bool
+(?==?) :: Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
 (?==?) = CmpMMExp
 
-(>.) :: Exp a -> Exp a -> Exp Bool
+(>.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 (>.) v1 v2 = GtExp v1 v2
 
 
 
-var :: Field a => a -> Exp a
+var :: Field a => a -> Exp t a
 var = RawValue
 
-just :: Field a => a -> Exp (Maybe a)
+just :: Field a => a -> Exp t (Maybe a)
 just = JustValue
 
 
@@ -270,30 +280,30 @@ from = do
     modify $ \s -> s { qFrom = constructFrom r }
     return r
 
-where_ :: Exp Bool -> Query r ()
+where_ :: Exp SqlTag Bool -> Query r ()
 where_ cond = modify $ \s -> s { qWhere = renderPrim cond : qWhere s }
 
-order_ :: Exp Dir -> Query r ()
+order_ :: Exp SqlTag Dir -> Query r ()
 order_ cond = modify $ \s -> s { qOrder = renderPrim cond : qOrder s }
 
-having_ :: Exp Bool -> Query r ()
+having_ :: Exp SqlTag Bool -> Query r ()
 having_ cond = modify $ \s -> s { qHaving = renderPrim cond : qHaving s }
 
-group_ :: Exp Bool -> Query r ()
+group_ :: Exp SqlTag Bool -> Query r ()
 group_ cond = modify $ \s -> s { qGroup = renderPrim cond : qGroup s }
 
 
 
 data Dir = Asc | Desc
 
-asc :: Exp a -> Exp Dir
+asc :: Exp SqlTag a -> Exp t Dir
 asc = DirExp Asc
 
-desc :: Exp a -> Exp Dir
+desc :: Exp SqlTag a -> Exp t Dir
 desc = DirExp Desc
 
 
-on_ :: Exp Bool -> Query r ()
+on_ :: Exp SqlTag Bool -> Query r ()
 on_ cond = modify $ \s -> s { qFrom = intoLastFree (qFrom s) (renderPrim cond) }
     where
         intoLastFree :: ActiveJoin -> String -> ActiveJoin
@@ -316,12 +326,11 @@ class From f where
     blankFromInstance :: Int -> f
     constructFrom :: f -> ActiveJoin
 
-
 class FromMaybe f where
     blankFromInstanceMaybe :: Int -> f
     constructFromMaybe :: f -> ActiveJoin
 
-instance (HasTable t, From j) => From ((Exp t) `InnerJoin` j) where
+instance (HasTable t, From j) => From ((Exp et t) `InnerJoin` j) where
     blankFromInstance n = (TableExp $ TableInstance n) `InnerJoin` (blankFromInstance $ n + 1)
     constructFrom ((TableExp ti) `InnerJoin` j) =
         let joinTableName = tableName (table :: NamedTable t)
@@ -332,7 +341,7 @@ instance (HasTable t, From j) => From ((Exp t) `InnerJoin` j) where
         in NextJoin {..}
     constructFrom _ = error "WAT"
 
-instance (HasTable t, FromMaybe j) => From ((Exp t) `LeftJoin` j) where
+instance (HasTable t, FromMaybe j) => From ((Exp et t) `LeftJoin` j) where
     blankFromInstance n = (TableExp $ TableInstance n) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
     constructFrom ((TableExp ti) `LeftJoin` j) =
         let joinTableName = tableName (table :: NamedTable t)
@@ -343,7 +352,7 @@ instance (HasTable t, FromMaybe j) => From ((Exp t) `LeftJoin` j) where
         in NextJoin {..}
     constructFrom _ = error "WAT"
 
-instance (HasTable t, FromMaybe j) => FromMaybe ((Exp (Maybe t)) `LeftJoin` j) where
+instance (HasTable t, FromMaybe j) => FromMaybe ((Exp et (Maybe t)) `LeftJoin` j) where
     blankFromInstanceMaybe n = (TableExp $ TableInstance n) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
     constructFromMaybe ((TableExp ti) `LeftJoin` j) =
         let joinTableName = tableName (table :: NamedTable t)
@@ -354,7 +363,7 @@ instance (HasTable t, FromMaybe j) => FromMaybe ((Exp (Maybe t)) `LeftJoin` j) w
         in NextJoin {..}
     constructFromMaybe _ = error "WAT"
 
-instance (HasTable t, FromMaybe j) => FromMaybe ((Exp (Maybe t)) `InnerJoin` j) where
+instance (HasTable t, FromMaybe j) => FromMaybe ((Exp et (Maybe t)) `InnerJoin` j) where
     blankFromInstanceMaybe n = (TableExp $ TableInstance n) `InnerJoin` (blankFromInstanceMaybe $ n + 1)
     constructFromMaybe ((TableExp ti) `InnerJoin` j) =
         let joinTableName = tableName (table :: NamedTable t)
@@ -365,7 +374,7 @@ instance (HasTable t, FromMaybe j) => FromMaybe ((Exp (Maybe t)) `InnerJoin` j) 
         in NextJoin {..}
     constructFromMaybe _ = error "WAT"
 
-instance HasTable t => FromMaybe (Exp (Maybe t)) where
+instance HasTable t => FromMaybe (Exp et (Maybe t)) where
     blankFromInstanceMaybe n = TableExp $ TableInstance n
     constructFromMaybe (TableExp ti) =
         let joinTableName = tableName (table :: NamedTable t)
@@ -373,7 +382,7 @@ instance HasTable t => FromMaybe (Exp (Maybe t)) where
         in LastJoin {..}
     constructFromMaybe _ = error "WAT"
 
-instance HasTable t => From (Exp t) where
+instance HasTable t => From (Exp et t) where
     blankFromInstance n = TableExp $ TableInstance n
     constructFrom (TableExp ti) =
         let joinTableName = tableName (table :: NamedTable t)
@@ -393,29 +402,32 @@ renderTableInstance :: TableInstance a -> String
 renderTableInstance (TableInstance tid) = "[t__" ++ show tid ++ "]"
 
 
-bindPrim :: Exp v -> SqlStmt -> Int -> IO Int
-bindPrim (RawValue f) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
-bindPrim (JustValue f) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
-bindPrim DbValue{} _ n = return n
-bindPrim (AddExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (SubExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (MulExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (DivExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (CmpExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (Cmp_MExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (CmpMMExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (CmpM_Exp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (GtExp a b) s n = bindPrim a s n >>= bindPrim b s
-bindPrim (DirExp _ a) s n = bindPrim a s n
-bindPrim (TableExp _t) _ _ = error "TODO: bind full table"
-bindPrim (AvgExp t) s n = bindPrim t s n
-bindPrim (CountExp t) s n = bindPrim t s n
-bindPrim (MaxExp t) s n = bindPrim t s n
-bindPrim (MinExp t) s n = bindPrim t s n
-bindPrim (SumExp t) s n = bindPrim t s n
-bindPrim (TotalExp t) s n = bindPrim t s n
+bindExp :: Exp t v -> SqlStmt -> Int -> IO Int
+bindExp (RawValue f) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
+bindExp (JustValue f) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
+bindExp DbValue{} _ n = return n
+bindExp (AddExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (SubExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (MulExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (DivExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (CmpExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (Cmp_MExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (CmpMMExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (CmpM_Exp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (GtExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (DirExp _ a) s n = bindExp a s n
+bindExp (TableExp _t) _ _ = error "TODO: bind full table"
+bindExp (AvgExp t) s n = bindExp t s n
+bindExp (CountExp t) s n = bindExp t s n
+bindExp (MaxExp t) s n = bindExp t s n
+bindExp (MinExp t) s n = bindExp t s n
+bindExp (SumExp t) s n = bindExp t s n
+bindExp (TotalExp t) s n = bindExp t s n
+bindExp (App a b) s n = bindExp a s n >>= bindExp b s
+bindExp (Pure _) _ n = return n
 
-renderPrim :: Exp v -> String
+
+renderPrim :: Exp SqlTag v -> String
 renderPrim (RawValue a) = intercalate "," (map (const "?") $ fieldTypes a)
 renderPrim (JustValue a) = intercalate "," (map (const "?") $ fieldTypes a)
 renderPrim (DbValue a) = a
@@ -438,7 +450,7 @@ renderPrim (MinExp t) = concat ["MIN (", renderPrim t, ")"]
 renderPrim (SumExp t) = concat ["SUM (", renderPrim t, ")"]
 renderPrim (TotalExp t) = concat ["TOTAL (", renderPrim t, ")"]
 
-renderAct :: Exp v1 -> Exp v2 -> String -> String
+renderAct :: Exp SqlTag v1 -> Exp SqlTag v2 -> String -> String
 renderAct e1 e2 s = concat ["(", renderPrim e1, s, renderPrim e2, ")"]
 
 ----------------------------------------------------------------------
@@ -451,7 +463,7 @@ createStmt = do
         where_ $ var 100 >. (t ^. Bar)
         on_ ((t ^. Foo) ==? (r ^?. Foo))
         order_ $ asc (t ^. Foo)
-        return $ RRRR <$. (t ^. Foo) <*. (r ^?. Bar +. just 10) <*. (var True) -- +. t ^. Bar *. var 10) <*. (var True)
+        return $ RRRR <$> (t ^. Foo) <*> (r ^?. Bar +. just 10) <*> (var True) -- +. t ^. Bar *. var 10) <*. (var True)
     return ()
 
 createStmt2 :: IO ()
@@ -460,7 +472,7 @@ createStmt2 = do
         t1 `InnerJoin` t2 `InnerJoin` t3 <- from
         on_ ((t1 ^. Foo) ==. (t2 ^. Foo))
         on_ ((t2 ^. Foo) ==. (t3 ^. Foo))
-        return $ Intx3 <$. (t1 ^. Foo) <*. (t2 ^. Foo) <*. (t3 ^. Foo)
+        return $ Intx3 <$> (t1 ^. Foo) <*> (t2 ^. Foo) <*> (t3 ^. Foo)
     return ()
 
 {-
@@ -481,14 +493,14 @@ createStmt4 = do
         on_ ((t3 ^. Foo) ==. (t4 ^. Foo))
         on_ ((t2 ^. Foo) ==. (t3 ^. Foo))
         on_ ((t1 ^. Foo) ==. (t2 ^. Foo))
-        return $ Intx6 <$.  (t1 ^. Foo) <*. (t2 ^. Foo) <*. (t3 ^. Foo) <*. (t4 ^. Foo) <*. (t5 ^. Foo) <*. (t6 ^. Foo)
+        return $ Intx6 <$>  (t1 ^. Foo) <*> (t2 ^. Foo) <*> (t3 ^. Foo) <*> (t4 ^. Foo) <*> (t5 ^. Foo) <*> (t6 ^. Foo)
     return ()
 
 createStmt5 :: IO ()
 createStmt5 = do
     _ <- constructQuery undefined $ do
         t1 `LeftJoin` t2 `LeftJoin` t3 `InnerJoin` t4 <- from
-        return $ (,,,) <$. (t1 ^. Foo) <*. (t2 ^?. Foo) <*. (t3 ^?. Foo) <*. t4 ^?. Foo
+        return $ (,,,) <$> (t1 ^. Foo) <*> (t2 ^?. Foo) <*> (t3 ^?. Foo) <*> t4 ^?. Foo
     return ()
 
 data Intx3 = Intx3 Int Int Int deriving (Generic)
@@ -505,7 +517,6 @@ infixl 9 ^., ^?.
 infixl 7 *., /.
 infixl 6 +., -.
 infixl 4 ==., >., ?==?, ?==, ==?
-infixl 3 <$., <*.
 
 -- sample table in the db
 data TTTT = TTTT { tFoo :: Int, tBar :: Double } deriving (Show, Generic)
