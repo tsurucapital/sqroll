@@ -10,23 +10,29 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE EmptyDataDecls #-}
--- {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Database.Sqroll.Flexible where
 
-import GHC.Generics (Generic)
-import Control.Applicative (Applicative (..), (<$>))
+--import GHC.Generics (Generic)
+import Control.Arrow (first)
+import Control.Applicative (Applicative (..)) --, (<$>))
 import Control.Monad.State
+import Data.Char (toUpper)
 import Data.List (intercalate)
 
 import Database.Sqroll.Table.Field
+import Database.Sqroll.Table.Naming (makeFieldName)
 import Database.Sqroll.Internal
 import Database.Sqroll.Sqlite3
 
 import Foreign.ForeignPtr
+
+
+import Language.Haskell.TH hiding (Stmt, Exp, runQ)
 
 newtype Query r a = Query { runQ :: State (QData r) a }
     deriving (Monad, MonadState (QData r))
@@ -91,7 +97,7 @@ constructQuery sqroll constructedResult = do
                             return Nothing
                 return result
 
-        selectPeek :: Exp HaskTag t -> SqlStmt -> Int -> IO (t, Int)
+        selectPeek :: Exp HaskTag r -> SqlStmt -> Int -> IO (r, Int)
         selectPeek (Pure x) _ n = return (x, n)
         selectPeek (App a b) stmt n = do
             (ar, n')  <- selectPeek a stmt n
@@ -223,13 +229,13 @@ instance Applicative (Exp HaskTag) where
 
 data TableInstance t = TableInstance Int deriving Show
 
-(^.) :: (Field (Component Full tag), IsTag tag)
-     => Exp SqlTag Full -> tag -> Exp t (Component Full tag)
+(^.) :: (Field (Component (Full tag) tag), IsTag tag)
+     => Exp SqlTag (Full tag) -> tag -> Exp t (Component (Full tag) tag)
 (^.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^.) _ _ = error "WAT"
 
-(^?.) :: (Field (Component Full tag), IsTag tag)
-      => Exp SqlTag (Maybe Full) -> tag -> Exp t (Maybe (Component Full tag))
+(^?.) :: (Field (Component (Full tag) tag), IsTag tag)
+      => Exp SqlTag (Maybe (Full tag)) -> tag -> Exp t (Maybe (Component (Full tag) tag))
 (^?.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^?.) _ _ = error "WAT"
 
@@ -237,7 +243,7 @@ data TableInstance t = TableInstance Int deriving Show
 type family Component full tag
 
 class IsTag tag where
-    type Full
+    type Full t
     getTagName :: tag -> String
 
 (*.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
@@ -474,3 +480,88 @@ infixl 9 ^., ^?.
 infixl 7 *., /.
 infixl 6 +., -.
 infixl 4 ==., >., ?==?, ?==, ==?
+
+
+
+
+-- | Derive some instances required for extended queries. To use those instances you will have
+-- to add following LANGUAGE pragmas: TypeFamilies, MultiParamTypeClasses and TemplateHaskell
+-- for deriving itself.
+--
+-- For every field of given record style datatype with single constructor created one tag
+-- datatype with the same name as field accessor, but with first letter capitalized:
+--
+-- > data Foo { fooBar :: Int, fooBaz :: Double }
+--
+-- following tags are created:
+--
+-- > data FooBar = FooBar
+-- > data FooBaz = FooBaz
+deriveExtendedQueries :: Name -> Q [Dec]
+deriveExtendedQueries typeName = do
+        typeInfo <- reify typeName
+
+        case typeInfo of
+            TyConI (DataD _ name _ [constr] _) ->
+                return $ mkDecls Nothing name (getPrimFields constr)
+
+            TyConI (NewtypeD _ name _ ntConstr _) -> do
+                (cName, constr) <- unpackNTConstr ntConstr
+                return $ mkDecls (Just name) cName (getPrimFields constr)
+
+            _ -> error invalid
+
+    where
+
+        -- I'm unhappy about this mess
+        invalid :: String
+        invalid = "You must specify datatype with a single constructor with record syntax."
+
+        unpackNTConstr :: Con -> Q (Name, Con)
+        unpackNTConstr (RecC _ [(_, _, ConT underlyingType)]) = do
+            typeInfo <- reify underlyingType
+            case typeInfo of
+                TyConI (DataD _ name _ [constr] _) -> return (name, constr)
+                _ -> error invalid
+        unpackNTConstr _ = error invalid
+
+        mkDecls :: Maybe Name -> Name -> [(String, Type)] -> [Dec]
+        mkDecls mNewType name prim =
+                let tags = map (mkTagType mNewType . toConstrName . fst) prim
+                    compInsts = map (mkCompInst mNewType name . first toConstrName) prim
+                    tagInsts = map (mkTagInst mNewType name . mkName . fst) prim
+                in tags ++ compInsts ++ tagInsts
+
+        mkTagType :: Maybe Name -> Name -> Dec
+        mkTagType mNewType name = let name' = preNT mNewType name
+                                  in DataD [] name' [] [NormalC name' []] []
+
+        mkCompInst :: Maybe Name -> Name -> (Name, Type) -> Dec
+        mkCompInst mNewType dName (fName, t) =
+            let name' = preNT mNewType fName
+                base' = maybe dName id mNewType
+            in TySynInstD ''Component [ConT base', ConT name'] t
+
+        mkTagInst :: Maybe Name -> Name -> Name -> Dec
+        mkTagInst mNewType pref acc =
+            let name' = preNT mNewType (toConstrName $ nameBase acc)
+                base' = maybe pref id mNewType
+                iType = ConT ''IsTag `AppT` ConT name'
+                decTp = TySynInstD ''Full [ConT name'] (ConT base')
+                body  = LitE . StringL $ makeFieldName (nameBase pref) (nameBase acc)
+                decFn = FunD 'getTagName [Clause [WildP] (NormalB body) []]
+            in InstanceD [] iType [decTp, decFn]
+
+        getPrimFields :: Con -> [(String, Type)]
+        getPrimFields constr =
+            case constr of
+                RecC _ fields -> map (\(fn, _, tn) -> (nameBase fn, tn)) fields
+                _ -> error "Sorry, but only record-type constructors are supported"
+
+        toConstrName :: String -> Name
+        toConstrName (c:cs) = mkName (toUpper c : cs)
+        toConstrName _ = error "You can't have empty name"
+
+        preNT :: Maybe Name -> Name -> Name
+        preNT (Just prefix) name = mkName (nameBase prefix ++ nameBase name)
+        preNT Nothing name = name
