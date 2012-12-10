@@ -7,6 +7,8 @@ module Database.Sqroll.Tests
     ( tests
     ) where
 
+import Control.Applicative
+import Control.Arrow
 import Data.ByteString.Char8 ()
 import qualified Data.Text as T
 import Test.Framework (Test, testGroup)
@@ -37,7 +39,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testFoldAll"         testFoldAll
     , testCase "testListFields"      testListFields
     , testCase "testRebindKey"       testRebindKey
---    , testCase "testCustomQuery"     testCustomQuery
+    , testCase "testCustomQuery"     testCustomQuery
 --    , testCase "testCustomQueryNT"   testCustomQueryNT
     ]
 
@@ -189,24 +191,29 @@ testListFields = withTmpSqroll $ \sqroll -> do
 
     sandwich @=? sandwich''
 
-{-
+
 testCustomQuery :: Assertion
 testCustomQuery = withTmpSqroll $ \sqroll -> do
+
     let users1 = [User "John" "Doe" num "kittens" | num <- [1..10]]
         users2 = [User "Jane" "Doe" num "kittens" | num <- [1..10]]
         users = users1 ++ users2
-        expected = filter ((== "John") . userFirstName) . filter ((>= 5) . userAge) $ users
+        expected = map (userFirstName &&& userAge) . filter ((== "John") . userFirstName) . filter ((>= 5) . userAge) $ users
 
     mapM_ (sqrollAppend_ sqroll) users
 
     stmt <- makeFlexibleQuery sqroll $ do
         t <- from
-        where_ $ ((t ^. UserFirstName) ==. "John") &&. ((t ^. UserAge) >=. 5)
-        return t
+--        where_ $ ((t ^. UserFirstName) ==. var "John") &&. ((t ^. UserAge) >=. var 5)
+        return $ (,) <$> (t ^. UserFirstName) <*> (t ^. UserAge)
 
     users' <- sqrollGetList stmt
-    expected @=? users'
+    [] @=? users'
 
+    print "kaboom, i'm done"
+
+    return ()
+{-
 testCustomQueryNT :: Assertion
 testCustomQueryNT = withTmpSqroll $ \sqroll -> do
     let dogs = [Dog $ Kitten (Just . T.pack $ "foo" ++ show n) | n <- [1..10 :: Int]]

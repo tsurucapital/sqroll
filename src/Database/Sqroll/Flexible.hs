@@ -329,7 +329,8 @@ just = JustValue
 
 
 compileJoin :: ActiveJoin -> String
-compileJoin = compileJoinR True
+compileJoin j@LastJoin{} = concat [ "[", joinTableName j, "] AS ", joinTableAs j ]
+compileJoin aj = compileJoinR True aj
     where
         compileJoinR :: Bool -> ActiveJoin -> String
         compileJoinR True j@NextJoin{} =
