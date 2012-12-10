@@ -9,6 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE EmptyDataDecls #-}
 -- {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -98,13 +99,32 @@ constructQuery sqroll constructedResult = do
             return (ar br , n'')
         selectPeek (RawValue x) _ n = return (x, n)
         selectPeek (JustValue x) _ n = return (Just x, n)
-        selectPeek (TableExp _ti) _ _n = error "TODO: peek whole table?"
+
         -- All other Exps are peekable as fields...
-        selectPeek _ _stmt _n = do
-            -- We still need a field constraint here somewhere...
-            -- p <- fieldPeek stmt n
-            -- return (p, n + length (fieldTypes p))
-            undefined
+        selectPeek AvgExp{} s n = peekResult s n
+        selectPeek TableExp{} _ _ = error "TableExp"
+        selectPeek DbValue{} s n = peekResult s n
+        selectPeek DirExp{} _ _ = error "DirExp"
+        selectPeek AddExp{} s n = peekResult s n
+        selectPeek SubExp{} s n = peekResult s n
+        selectPeek MulExp{} s n = peekResult s n
+        selectPeek DivExp{} s n = peekResult s n
+        selectPeek CmpExp{} s n = peekResult s n
+        selectPeek Cmp_MExp{} s n = peekResult s n
+        selectPeek CmpM_Exp{} s n = peekResult s n
+        selectPeek CmpMMExp{} s n = peekResult s n
+        selectPeek GtExp{} s n = peekResult s n
+        selectPeek CountExp{} s n = peekResult s n
+        selectPeek SumExp{} s n = peekResult s n
+        selectPeek MaxExp{} s n = peekResult s n
+        selectPeek MinExp{} s n = peekResult s n
+        selectPeek TotalExp{} s n = peekResult s n
+
+        peekResult :: Field r => SqlStmt -> Int -> IO (r, Int)
+        peekResult  stmt n = do
+            p <- fieldPeek stmt n
+            return (p, n + length (fieldTypes p))
+            -- undefined
 
 
 collectFields :: Exp t a -> [String]
@@ -113,7 +133,7 @@ collectFields (App a b) = collectFields a ++ collectFields b
 collectFields (RawValue f) = [renderPrim (RawValue f)]
 collectFields (JustValue f) = [renderPrim (JustValue f)]
 collectFields (TableExp ti) = [renderPrim (TableExp ti)]
-collectFields (DbValue s) = [renderPrim (DbValue s)]
+collectFields (DbValue s) = [s]
 collectFields (AddExp a b) = [renderPrim (AddExp a b)]
 collectFields (SubExp a b) = [renderPrim (SubExp a b)]
 collectFields (DivExp a b) = [renderPrim (DivExp a b)]
@@ -168,28 +188,28 @@ data Exp t a where
     RawValue  :: Field a => a -> Exp t a
     JustValue :: Field a => a -> Exp t (Maybe a)
     TableExp  :: TableInstance (NamedTable full) -> Exp t full
-    DbValue   :: String -> Exp t a
-    AddExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
-    SubExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
-    DivExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
-    MulExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+    DbValue   :: Field a => String -> Exp t a
+    AddExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
+    SubExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
+    DivExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
+    MulExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
 
-    CmpExp    :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+    CmpExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 
-    CmpM_Exp    :: Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
-    Cmp_MExp    :: Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
-    CmpMMExp    :: Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
+    CmpM_Exp    :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
+    Cmp_MExp    :: Field a => Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
+    CmpMMExp    :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
 
-    GtExp     :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+    GtExp     :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 
-    DirExp    :: Dir -> Exp SqlTag a -> Exp t Dir
+    DirExp    :: Field a => Dir -> Exp SqlTag a -> Exp t Dir
 
-    AvgExp   :: Exp SqlTag a -> Exp t a
-    CountExp :: Exp SqlTag a -> Exp t Int
-    MaxExp   :: Exp SqlTag a -> Exp t a
-    MinExp   :: Exp SqlTag a -> Exp t a
-    SumExp   :: Exp SqlTag a -> Exp t a
-    TotalExp :: Exp SqlTag a -> Exp t Double
+    AvgExp   :: Field a => Exp SqlTag a -> Exp t a
+    CountExp :: Field a => Exp SqlTag a -> Exp t Int
+    MaxExp   :: Field a => Exp SqlTag a -> Exp t a
+    MinExp   :: Field a => Exp SqlTag a -> Exp t a
+    SumExp   :: Field a => Exp SqlTag a -> Exp t a
+    TotalExp :: Field a => Exp SqlTag a -> Exp t Double
 
     Pure :: a -> Exp HaskTag a
     App  :: Exp HaskTag (a -> b) -> Exp HaskTag a -> Exp HaskTag b
@@ -203,18 +223,15 @@ instance Applicative (Exp HaskTag) where
 
 data TableInstance t = TableInstance Int deriving Show
 
-(^.) :: (IsTag tag) => Exp SqlTag Full -> tag -> Exp t (Component Full tag)
+(^.) :: (Field (Component Full tag), IsTag tag)
+     => Exp SqlTag Full -> tag -> Exp t (Component Full tag)
 (^.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^.) _ _ = error "WAT"
 
-(^?.) :: (IsTag tag)
-     => Exp SqlTag (Maybe Full) -> tag -> Exp t (Maybe (Component Full tag))
+(^?.) :: (Field (Component Full tag), IsTag tag)
+      => Exp SqlTag (Maybe Full) -> tag -> Exp t (Maybe (Component Full tag))
 (^?.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
 (^?.) _ _ = error "WAT"
-
-
-grabWhole :: HasTable Full => TableInstance Full -> Exp t Full
-grabWhole = error "grab whole is not implemented"
 
 
 type family Component full tag
@@ -223,31 +240,31 @@ class IsTag tag where
     type Full
     getTagName :: tag -> String
 
-(*.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+(*.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (*.) = MulExp
 
-(+.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+(+.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (+.) = AddExp
 
-(/.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+(/.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (/.) = DivExp
 
-(-.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t a
+(-.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
 (-.) = SubExp
 
-(==.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+(==.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 (==.) = CmpExp
 
-(==?) :: Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
+(==?) :: Field a => Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
 (==?) = Cmp_MExp
 
-(?==) :: Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
+(?==) :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
 (?==) = CmpM_Exp
 
-(?==?) :: Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
+(?==?) :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
 (?==?) = CmpMMExp
 
-(>.) :: Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+(>.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 (>.) v1 v2 = GtExp v1 v2
 
 
@@ -296,10 +313,10 @@ group_ cond = modify $ \s -> s { qGroup = renderPrim cond : qGroup s }
 
 data Dir = Asc | Desc
 
-asc :: Exp SqlTag a -> Exp t Dir
+asc :: Field a => Exp SqlTag a -> Exp t Dir
 asc = DirExp Asc
 
-desc :: Exp SqlTag a -> Exp t Dir
+desc :: Field a => Exp SqlTag a -> Exp t Dir
 desc = DirExp Desc
 
 
