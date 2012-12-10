@@ -34,9 +34,9 @@ module Database.Sqroll
     , sqrollGetOne
     , sqrollGetMaybe
 
-    , module Database.Sqroll.Custom
+    , module Database.Sqroll.Flexible
     ) where
 
+import Database.Sqroll.Flexible
 import Database.Sqroll.Internal
 import Database.Sqroll.Table.Field (HString (..))
-import Database.Sqroll.Custom

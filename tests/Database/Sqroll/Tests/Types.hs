@@ -45,7 +45,7 @@ import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 import Database.Sqroll (HasTable (..), Key, aliasTable)
-import Database.Sqroll.Custom
+import Database.Sqroll.Flexible
 import Database.Sqroll.Table.Field (Field (..))
 import Database.Sqroll.Table.Field.Unique
 

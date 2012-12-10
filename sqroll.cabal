@@ -23,7 +23,7 @@ Library
 
   Exposed-modules:
     Database.Sqroll
-    Database.Sqroll.Custom
+    Database.Sqroll.Flexible
     Database.Sqroll.Internal
     Database.Sqroll.Pure
     Database.Sqroll.Sqlite3

@@ -15,11 +15,20 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Database.Sqroll.Flexible where
+module Database.Sqroll.Flexible
+    ( makeFlexibleQuery
+    , deriveExtendedQueries
+    , (^.), (^?.), (*.), (/.), (+.), (-.), (==.), (?==?), (?==), (==?)
+    , (>.), (>=.), (<.), (<=.), (&&.), (||.), (!.)
+    , var, just
+    , from, on_
+    , where_, order_, having_, group_
+    , asc, desc
+    , InnerJoin (..), LeftJoin (..)
+    ) where
 
---import GHC.Generics (Generic)
 import Control.Arrow (first)
-import Control.Applicative (Applicative (..)) --, (<$>))
+import Control.Applicative (Applicative (..))
 import Control.Monad.State
 import Data.Char (toUpper)
 import Data.List (intercalate)
@@ -44,16 +53,13 @@ http://www.sqlite.org/lang_aggfunc.html
 http://www.sqlite.org/lang_corefunc.html
 http://www.sqlite.org/lang_datefunc.html ?????
 
-GROUP BY
 LIKE ???
-
-
 }}} -}
 
 
 
-constructQuery :: a ~ (Exp HaskTag t) => Sqroll -> Query a a -> IO (Stmt t ())
-constructQuery sqroll constructedResult = do
+makeFlexibleQuery :: a ~ (Exp HaskTag t) => Sqroll -> Query a a -> IO (Stmt t ())
+makeFlexibleQuery sqroll constructedResult = do
         let (r, q) = runState (runQ constructedResult) emptyQuery
 
             rawQuery = concat $ [ "SELECT ", intercalate ", " (collectFields r)
@@ -120,11 +126,17 @@ constructQuery sqroll constructedResult = do
         selectPeek CmpM_Exp{} s n = peekResult s n
         selectPeek CmpMMExp{} s n = peekResult s n
         selectPeek GtExp{} s n = peekResult s n
+        selectPeek GteExp{} s n = peekResult s n
+        selectPeek LtExp{} s n = peekResult s n
+        selectPeek LteExp{} s n = peekResult s n
         selectPeek CountExp{} s n = peekResult s n
         selectPeek SumExp{} s n = peekResult s n
         selectPeek MaxExp{} s n = peekResult s n
         selectPeek MinExp{} s n = peekResult s n
         selectPeek TotalExp{} s n = peekResult s n
+        selectPeek AndExp{} s n = peekResult s n
+        selectPeek OrExp{} s n = peekResult s n
+        selectPeek NotExp{} s n = peekResult s n
 
         peekResult :: Field r => SqlStmt -> Int -> IO (r, Int)
         peekResult  stmt n = do
@@ -149,6 +161,9 @@ collectFields (CmpM_Exp a b) = [renderPrim (CmpM_Exp a b)]
 collectFields (Cmp_MExp a b) = [renderPrim (Cmp_MExp a b)]
 collectFields (CmpMMExp a b) = [renderPrim (CmpMMExp a b)]
 collectFields (GtExp a b) = [renderPrim (GtExp a b)]
+collectFields (GteExp a b) = [renderPrim (GteExp a b)]
+collectFields (LtExp a b) = [renderPrim (LtExp a b)]
+collectFields (LteExp a b) = [renderPrim (LteExp a b)]
 collectFields (DirExp a b) = [renderPrim (DirExp a b)]
 collectFields (AvgExp a) = [renderPrim (AvgExp a)]
 collectFields (CountExp a) = [renderPrim (CountExp a)]
@@ -156,6 +171,9 @@ collectFields (MaxExp a) = [renderPrim (MaxExp a)]
 collectFields (MinExp a) = [renderPrim (MinExp a)]
 collectFields (SumExp a) = [renderPrim (SumExp a)]
 collectFields (TotalExp a) = [renderPrim (TotalExp a)]
+collectFields (AndExp a b) = [renderPrim (AndExp a b)]
+collectFields (OrExp a b) = [renderPrim (OrExp a b)]
+collectFields (NotExp a) = [renderPrim (NotExp a)]
 
 emptyQuery :: QData r
 emptyQuery = QData {..}
@@ -195,30 +213,41 @@ data Exp t a where
     JustValue :: Field a => a -> Exp t (Maybe a)
     TableExp  :: TableInstance (NamedTable full) -> Exp t full
     DbValue   :: Field a => String -> Exp t a
+    
+    -- math
     AddExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
     SubExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
     DivExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
     MulExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
 
-    CmpExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+    -- boolean
+    AndExp    :: Exp SqlTag Bool -> Exp SqlTag Bool -> Exp t Bool
+    OrExp     :: Exp SqlTag Bool -> Exp SqlTag Bool -> Exp t Bool
+    NotExp    :: Exp SqlTag Bool -> Exp t Bool
 
-    CmpM_Exp    :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
-    Cmp_MExp    :: Field a => Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
-    CmpMMExp    :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
+    -- compare operations
+    CmpExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+    CmpM_Exp  :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag a -> Exp t Bool
+    Cmp_MExp  :: Field a => Exp SqlTag a -> Exp SqlTag (Maybe a) -> Exp t Bool
+    CmpMMExp  :: Field a => Exp SqlTag (Maybe a) -> Exp SqlTag (Maybe a) -> Exp t Bool
 
     GtExp     :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+    GteExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+    LtExp     :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+    LteExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 
     DirExp    :: Field a => Dir -> Exp SqlTag a -> Exp t Dir
 
-    AvgExp   :: Field a => Exp SqlTag a -> Exp t a
-    CountExp :: Field a => Exp SqlTag a -> Exp t Int
-    MaxExp   :: Field a => Exp SqlTag a -> Exp t a
-    MinExp   :: Field a => Exp SqlTag a -> Exp t a
-    SumExp   :: Field a => Exp SqlTag a -> Exp t a
-    TotalExp :: Field a => Exp SqlTag a -> Exp t Double
+    -- aggregation
+    AvgExp    :: Field a => Exp SqlTag a -> Exp t a
+    CountExp  :: Field a => Exp SqlTag a -> Exp t Int
+    MaxExp    :: Field a => Exp SqlTag a -> Exp t a
+    MinExp    :: Field a => Exp SqlTag a -> Exp t a
+    SumExp    :: Field a => Exp SqlTag a -> Exp t a
+    TotalExp  :: Field a => Exp SqlTag a -> Exp t Double
 
-    Pure :: a -> Exp HaskTag a
-    App  :: Exp HaskTag (a -> b) -> Exp HaskTag a -> Exp HaskTag b
+    Pure      :: a -> Exp HaskTag a
+    App       :: Exp HaskTag (a -> b) -> Exp HaskTag a -> Exp HaskTag b
 
 instance Functor (Exp HaskTag) where
     fmap f e = Pure f `App` e
@@ -273,6 +302,23 @@ class IsTag tag where
 (>.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
 (>.) v1 v2 = GtExp v1 v2
 
+(>=.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+(>=.) v1 v2 = GteExp v1 v2
+
+(<.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+(<.) v1 v2 = LtExp v1 v2
+
+(<=.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t Bool
+(<=.) v1 v2 = LteExp v1 v2
+
+(&&.) :: Exp SqlTag Bool -> Exp SqlTag Bool -> Exp t Bool
+(&&.) v1 v2 = AndExp v1 v2
+
+(||.) :: Exp SqlTag Bool -> Exp SqlTag Bool -> Exp t Bool
+(||.) v1 v2 = OrExp v1 v2
+
+(!.) :: Exp SqlTag Bool -> Exp t Bool
+(!.) v1 = NotExp v1
 
 
 var :: Field a => a -> Exp t a
@@ -438,6 +484,12 @@ bindExp (Cmp_MExp a b) s n = bindExp a s n >>= bindExp b s
 bindExp (CmpMMExp a b) s n = bindExp a s n >>= bindExp b s
 bindExp (CmpM_Exp a b) s n = bindExp a s n >>= bindExp b s
 bindExp (GtExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (GteExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (LtExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (LteExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (AndExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (OrExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (NotExp a) s n = bindExp a s n
 bindExp (DirExp _ a) s n = bindExp a s n
 bindExp (TableExp _t) _ _ = error "TODO: bind full table"
 bindExp (AvgExp t) s n = bindExp t s n
@@ -463,6 +515,12 @@ renderPrim (Cmp_MExp e1 e2) = renderAct e1 e2 "="
 renderPrim (CmpMMExp e1 e2) = renderAct e1 e2 "="
 renderPrim (CmpM_Exp e1 e2) = renderAct e1 e2 "="
 renderPrim (GtExp  e1 e2) = renderAct e1 e2 ">"
+renderPrim (GteExp  e1 e2) = renderAct e1 e2 ">="
+renderPrim (LtExp  e1 e2) = renderAct e1 e2 "<"
+renderPrim (LteExp  e1 e2) = renderAct e1 e2 "<="
+renderPrim (AndExp  e1 e2) = renderAct e1 e2 "AND"
+renderPrim (OrExp  e1 e2) = renderAct e1 e2 "OR"
+renderPrim (NotExp e) = concat ["NOT (", renderPrim e, ")"]
 renderPrim (DirExp Asc e) = concat ["(", renderPrim e,  ") ASC"]
 renderPrim (DirExp Desc e) = concat ["(", renderPrim e,  ") DESC"]
 renderPrim (TableExp _t) = error "TODO: render and bind full set of fields"

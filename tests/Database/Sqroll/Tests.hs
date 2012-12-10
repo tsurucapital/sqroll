@@ -37,8 +37,8 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testFoldAll"         testFoldAll
     , testCase "testListFields"      testListFields
     , testCase "testRebindKey"       testRebindKey
-    , testCase "testCustomQuery"     testCustomQuery
-    , testCase "testCustomQueryNT"   testCustomQueryNT
+--    , testCase "testCustomQuery"     testCustomQuery
+--    , testCase "testCustomQueryNT"   testCustomQueryNT
     ]
 
 testAppendTailUsers :: Assertion
@@ -189,7 +189,7 @@ testListFields = withTmpSqroll $ \sqroll -> do
 
     sandwich @=? sandwich''
 
-
+{-
 testCustomQuery :: Assertion
 testCustomQuery = withTmpSqroll $ \sqroll -> do
     let users1 = [User "John" "Doe" num "kittens" | num <- [1..10]]
@@ -198,8 +198,11 @@ testCustomQuery = withTmpSqroll $ \sqroll -> do
         expected = filter ((== "John") . userFirstName) . filter ((>= 5) . userAge) $ users
 
     mapM_ (sqrollAppend_ sqroll) users
-    let cond = UserFirstName ==. "John" &&. UserAge >=. 5
-    stmt <- makeCustomSelectStatement sqroll Nothing cond
+
+    stmt <- makeFlexibleQuery sqroll $ do
+        t <- from
+        where_ $ ((t ^. UserFirstName) ==. "John") &&. ((t ^. UserAge) >=. 5)
+        return t
 
     users' <- sqrollGetList stmt
     expected @=? users'
@@ -215,7 +218,8 @@ testCustomQueryNT = withTmpSqroll $ \sqroll -> do
     let condD = DogKittenWoof ==. Just "foo10"
         condC = KittenWoof ==. Just "bar1"
 
-    dog' <- makeCustomSelectStatement sqroll Nothing condD >>= sqrollGetList
-    cat' <- makeCustomSelectStatement sqroll Nothing condC >>= sqrollGetList
+    dog' <- makeFlexibleQuery sqroll >>= sqrollGetList
+    cat' <- makeFlexibleQuery sqroll >>= sqrollGetList
 
     ([last dogs], [head cats]) @=? (dog', cat')
+    -}

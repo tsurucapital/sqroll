@@ -37,7 +37,7 @@ testFlexible = withTmpSqroll $ \sqroll -> do
     sqrollAppend_ sqroll $ TestTable 1   1.0
     sqrollAppend_ sqroll $ TestTable 100 100.0
 
-    stmt <- constructQuery sqroll $ do
+    stmt <- makeFlexibleQuery sqroll $ do
         t `LeftJoin` r <- from
 --        where_ $ (r ^?. TBar) >. just 100
 --        where_ $ var 100 >. (t ^. TBar)
@@ -60,7 +60,7 @@ testFlexible = withTmpSqroll $ \sqroll -> do
 
 createStmt :: IO ()
 createStmt = do
-    _ <- constructQuery undefined $ do
+    _ <- makeFlexibleQuery undefined $ do
         t `LeftJoin` r <- from
         where_ $ (r ^?. TBar) >. just 100
         where_ $ var 100 >. (t ^. TBar)
@@ -71,25 +71,25 @@ createStmt = do
 
 createStmt2 :: IO ()
 createStmt2 = do
-    _ <- constructQuery undefined $ do
+    _ <- makeFlexibleQuery undefined $ do
         t1 `InnerJoin` t2 `InnerJoin` t3 <- from
         on_ ((t1 ^. TFoo) ==. (t2 ^. TFoo))
         on_ ((t2 ^. TFoo) ==. (t3 ^. TFoo))
         return $ (,,) <$> (t1 ^. TFoo) <*> (t2 ^. TFoo) <*> (t3 ^. TFoo)
     return ()
 
-
+{-
 createStmt3 :: IO ()
 createStmt3 = do
-    _ <- constructQuery undefined $ do
+    _ <- makeFlexibleQuery undefined $ do
         (t1 :: Exp HaskTag TestTable) <- from
         return $ t1
     return ()
-
+-}
 
 createStmt4 :: IO ()
 createStmt4 = do
-    _ <- constructQuery undefined $ do
+    _ <- makeFlexibleQuery undefined $ do
         t1 `InnerJoin` t2 `InnerJoin` t3 `InnerJoin` t4 `InnerJoin` t5 `InnerJoin` t6 <- from
         on_ ((t5 ^. TFoo) ==. (t6 ^. TFoo))
         on_ ((t4 ^. TFoo) ==. (t5 ^. TFoo))
@@ -101,14 +101,14 @@ createStmt4 = do
 
 createStmt5 :: IO ()
 createStmt5 = do
-    _ <- constructQuery undefined $ do
+    _ <- makeFlexibleQuery undefined $ do
         t1 `LeftJoin` t2 `LeftJoin` t3 `InnerJoin` t4 <- from
         return $ (,,,) <$> (t1 ^. TFoo) <*> (t2 ^?. TFoo) <*> (t3 ^?. TFoo) <*> t4 ^?. TFoo
     return ()
 
 _unused_ok :: IO ()
 _unused_ok = do
-    _ <- undefined $ (createStmt, createStmt2, createStmt3, createStmt4, createStmt5)
+    _ <- undefined $ (createStmt, createStmt2, {- createStmt3, -} createStmt4, createStmt5)
     _ <- undefined $ (tFoo, tBar, foo, bar, baz)
 
     return ()
