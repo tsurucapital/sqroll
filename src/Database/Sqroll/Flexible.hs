@@ -30,6 +30,7 @@ module Database.Sqroll.Flexible
 import Control.Arrow (first)
 import Control.Applicative (Applicative (..))
 import Control.Monad.State
+import Data.Monoid
 import Data.Char (toUpper)
 import Data.List (intercalate)
 
@@ -64,16 +65,33 @@ makeFlexibleQuery sqroll constructedResult = do
 
             rawQuery = concat $ [ "SELECT ", intercalate ", " (collectFields r)
                                 , " FROM ", compileJoin (qFrom q)
-                                , mkWhere (qWhere q)
-                                , mkGroup (qGroup q)
-                                , mkHaving (qHaving q)
-                                , mkOrder (qOrder q)
+                                , mkWhere (fst $ qWhere q)
+                                , mkGroup (fst $ qGroup q)
+                                , mkHaving (fst $ qHaving q)
+                                , mkOrder (fst $ qOrder q)
                                 ]
 
         putStrLn rawQuery
 
         stmt <- sqlPrepare (sqrollSql sqroll) rawQuery
-        void $ withForeignPtr stmt $ \raw -> bindExp r raw 1
+
+        withForeignPtr stmt $ \raw -> do
+
+            n0  <- bindExp r raw 1
+            n   <- case snd $ qWhere q of
+                    Just cond -> bindExp cond raw n0
+                    _ -> return n0
+            n'  <- case snd $ qGroup q of
+                    Just cond -> bindExp cond raw n
+                    _ -> return n
+            n'' <- case snd $ qHaving q of
+                    Just cond -> bindExp cond raw n'
+                    _ -> return n
+            _   <- case snd $ qOrder q of
+                    Just cond -> bindExp cond raw n''
+                    _ -> return n
+            return ()
+
         return $ Stmt (stmt, mkPeeker r)
     where
         mkWhere :: [String] -> String
@@ -174,22 +192,23 @@ collectFields (TotalExp a) = [renderPrim (TotalExp a)]
 collectFields (AndExp a b) = [renderPrim (AndExp a b)]
 collectFields (OrExp a b) = [renderPrim (OrExp a b)]
 collectFields (NotExp a) = [renderPrim (NotExp a)]
+collectFields (CommaExp a b) = [renderPrim (CommaExp a b)]
 
 emptyQuery :: QData r
 emptyQuery = QData {..}
     where
         qFrom = error "From was not specified yet"
-        qWhere = []
-        qOrder = []
-        qHaving = []
-        qGroup = []
+        qWhere = ([], Nothing)
+        qOrder = ([], Nothing)
+        qHaving = ([], Nothing)
+        qGroup = ([], Nothing)
 
 data QData r = QData
     { qFrom :: ActiveJoin
-    , qWhere :: [String]
-    , qOrder :: [String]
-    , qHaving :: [String]
-    , qGroup :: [String]
+    , qWhere :: ([String], Maybe (Exp SqlTag Bool))
+    , qOrder :: ([String], Maybe (Exp SqlTag Dir))
+    , qHaving :: ([String], Maybe (Exp SqlTag Bool))
+    , qGroup :: ([String], Maybe (Exp SqlTag Bool))
     }
 
 data ActiveJoin
@@ -246,6 +265,8 @@ data Exp t a where
     SumExp    :: Field a => Exp SqlTag a -> Exp t a
     TotalExp  :: Field a => Exp SqlTag a -> Exp t Double
 
+    CommaExp  :: Exp SqlTag Dir -> Exp SqlTag Dir -> Exp SqlTag Dir
+
     Pure      :: a -> Exp HaskTag a
     App       :: Exp HaskTag (a -> b) -> Exp HaskTag a -> Exp HaskTag b
 
@@ -255,6 +276,14 @@ instance Functor (Exp HaskTag) where
 instance Applicative (Exp HaskTag) where
     pure  = Pure
     (<*>) = App
+
+instance Monoid (Exp SqlTag Bool) where
+    mappend a b = a &&. b
+    mempty = var True
+
+instance Monoid (Exp SqlTag Dir) where
+    mappend a b = a `CommaExp` b
+    mempty = asc $ var True
 
 data TableInstance t = TableInstance Int deriving Show
 
@@ -351,16 +380,23 @@ from = do
     return r
 
 where_ :: Exp SqlTag Bool -> Query r ()
-where_ cond = modify $ \s -> s { qWhere = renderPrim cond : qWhere s }
+where_ cond = modify $ \s -> s { qWhere = addClause cond (qWhere s) }
 
 order_ :: Exp SqlTag Dir -> Query r ()
-order_ cond = modify $ \s -> s { qOrder = renderPrim cond : qOrder s }
+order_ cond = modify $ \s -> s { qOrder = addClause cond (qOrder s) }
 
 having_ :: Exp SqlTag Bool -> Query r ()
-having_ cond = modify $ \s -> s { qHaving = renderPrim cond : qHaving s }
+having_ cond = modify $ \s -> s { qHaving = addClause cond (qHaving s) }
 
 group_ :: Exp SqlTag Bool -> Query r ()
-group_ cond = modify $ \s -> s { qGroup = renderPrim cond : qGroup s }
+group_ cond = modify $ \s -> s { qGroup = addClause cond (qGroup s) }
+
+
+addClause :: Monoid (Exp SqlTag a)
+    => Exp SqlTag a
+    -> ([String], Maybe (Exp SqlTag a))
+    -> ([String], Maybe (Exp SqlTag a))
+addClause newCond (strs, cond) = (renderPrim newCond : strs, cond `mappend` Just newCond)
 
 
 
@@ -501,6 +537,7 @@ bindExp (SumExp t) s n = bindExp t s n
 bindExp (TotalExp t) s n = bindExp t s n
 bindExp (App a b) s n = bindExp a s n >>= bindExp b s
 bindExp (Pure _) _ n = return n
+bindExp (CommaExp a b) s n = bindExp a s n >>= bindExp b s
 
 
 renderPrim :: Exp SqlTag v -> String
@@ -531,9 +568,10 @@ renderPrim (MaxExp t) = concat ["MAX (", renderPrim t, ")"]
 renderPrim (MinExp t) = concat ["MIN (", renderPrim t, ")"]
 renderPrim (SumExp t) = concat ["SUM (", renderPrim t, ")"]
 renderPrim (TotalExp t) = concat ["TOTAL (", renderPrim t, ")"]
+renderPrim (CommaExp a b) = concat [renderPrim a, ", ", renderPrim b]
 
 renderAct :: Exp SqlTag v1 -> Exp SqlTag v2 -> String -> String
-renderAct e1 e2 s = concat ["(", renderPrim e1, s, renderPrim e2, ")"]
+renderAct e1 e2 s = concat [" ( ", renderPrim e1, s, renderPrim e2, " ) "]
 
 infixl 9 ^., ^?.
 infixl 7 *., /.

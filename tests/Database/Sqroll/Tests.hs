@@ -204,11 +204,12 @@ testCustomQuery = withTmpSqroll $ \sqroll -> do
 
     stmt <- makeFlexibleQuery sqroll $ do
         t <- from
---        where_ $ ((t ^. UserFirstName) ==. var "John") &&. ((t ^. UserAge) >=. var 5)
+        where_ $ ((t ^. UserFirstName) ==. var "John") &&. ((t ^. UserAge) >=. var 5)
+        order_ $ desc $ t ^. UserAge
         return $ (,) <$> (t ^. UserFirstName) <*> (t ^. UserAge)
 
     users' <- sqrollGetList stmt
-    [] @=? users'
+    (reverse expected) @=? users'
 
     print "kaboom, i'm done"
 
