@@ -1,7 +1,6 @@
 #include "sqroll.h"
 
-int sqroll_finalize_stmt(sqlite3_stmt *stmt) {
-    sqlite3 *db = sqlite3_db_handle(stmt);
+int sqroll_finalize_stmt(sqlite3 *db, sqlite3_stmt *stmt) {
     sqlite3_stmt *i = sqlite3_next_stmt(db, 0);
     int status = 0;
 

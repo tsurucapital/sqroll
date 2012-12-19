@@ -157,13 +157,13 @@ foreign import ccall "sqlite3.h sqlite3_prepare_v2" sqlite3_prepare_v2
     :: Sql -> CString -> CInt -> Ptr SqlStmt -> Ptr CString -> IO SqlStatus
 
 foreign import ccall "sqroll.h &sqroll_finalize_stmt" sqroll_finalize_stmt
-    :: FunPtr (Sql -> IO ())
+    :: FunPtr (Sql -> SqlStmt -> IO ())
 
 sqlPrepare :: Sql -> String -> IO SqlFStmt
 sqlPrepare db str = alloca $ \stmtPtr -> withCStringLen str $ \(cstr, len) -> do
     sqlite3_prepare_v2 db cstr (fromIntegral len) stmtPtr nullPtr >>=
         orDie ("sqlite3_prepare_v2: (" ++ str ++ ")")
-    peek stmtPtr >>= newForeignPtr sqroll_finalize_stmt
+    peek stmtPtr >>= newForeignPtrEnv sqroll_finalize_stmt db
 {-# INLINE sqlPrepare #-}
 
 foreign import ccall "sqlite3.h sqlite3_wal_checkpoint_v2" sqlite3_wal_checkpoint_v2
