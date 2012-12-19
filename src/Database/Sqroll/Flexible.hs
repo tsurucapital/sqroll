@@ -71,8 +71,6 @@ makeFlexibleQuery sqroll constructedResult = do
                                 , mkOrder (fst $ qOrder q)
                                 ]
 
-        putStrLn rawQuery
-
         stmt <- sqlPrepare (sqrollSql sqroll) rawQuery
 
         withForeignPtr stmt $ \raw -> do

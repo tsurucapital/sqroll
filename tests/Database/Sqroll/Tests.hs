@@ -211,9 +211,6 @@ testCustomQuery = withTmpSqroll $ \sqroll -> do
     users' <- sqrollGetList stmt
     (reverse expected) @=? users'
 
-    print "kaboom, i'm done"
-
-    return ()
 {-
 testCustomQueryNT :: Assertion
 testCustomQueryNT = withTmpSqroll $ \sqroll -> do
