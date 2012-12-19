@@ -25,6 +25,7 @@ module Database.Sqroll.Flexible
     , where_, order_, having_, group_
     , asc, desc
     , InnerJoin (..), LeftJoin (..)
+    , count
     ) where
 
 import Control.Arrow (first)
@@ -194,6 +195,7 @@ collectFields (AndExp a b) = [renderPrim (AndExp a b)]
 collectFields (OrExp a b) = [renderPrim (OrExp a b)]
 collectFields (NotExp a) = [renderPrim (NotExp a)]
 collectFields (CommaExp a b) = [renderPrim (CommaExp a b)]
+collectFields (GroupExp a) = [renderPrim (GroupExp a)]
 
 emptyQuery :: QData r
 emptyQuery = QData {..}
@@ -203,14 +205,18 @@ emptyQuery = QData {..}
         qOrder = ([], Nothing)
         qHaving = ([], Nothing)
         qGroup = ([], Nothing)
+        qNextAlias = 1
 
 data QData r = QData
     { qFrom :: ActiveJoin
     , qWhere :: ([String], Maybe (Exp SqlTag Bool))
     , qOrder :: ([String], Maybe (Exp SqlTag Dir))
     , qHaving :: ([String], Maybe (Exp SqlTag Bool))
-    , qGroup :: ([String], Maybe (Exp SqlTag Bool))
+    , qGroup :: ([String], Maybe (Exp SqlTag GroupBy))
+    , qNextAlias :: Int
     }
+
+data GroupBy
 
 data ActiveJoin
     = NextJoin
@@ -267,10 +273,16 @@ data Exp t a where
     SumExp    :: Field a => Exp SqlTag a -> Exp t a
     TotalExp  :: Field a => Exp SqlTag a -> Exp t Double
 
-    CommaExp  :: Exp SqlTag Dir -> Exp SqlTag Dir -> Exp SqlTag Dir
+    CommaExp  :: Exp SqlTag a -> Exp SqlTag a -> Exp SqlTag a
+
+    GroupExp  :: Field a => Exp SqlTag a -> Exp SqlTag GroupBy
 
     Pure      :: a -> Exp HaskTag a
     App       :: Exp HaskTag (a -> b) -> Exp HaskTag a -> Exp HaskTag b
+
+
+count :: Field a => Exp SqlTag a -> Exp t Int
+count = CountExp
 
 instance Functor (Exp HaskTag) where
     fmap f e = Pure f `App` e
@@ -286,6 +298,10 @@ instance Monoid (Exp SqlTag Bool) where
 instance Monoid (Exp SqlTag Dir) where
     mappend a b = a `CommaExp` b
     mempty = asc $ var True
+
+instance Monoid (Exp SqlTag GroupBy) where
+    mappend a b = a `CommaExp` b
+    mempty = error "WAT?"
 
 data TableInstance t = TableInstance Int deriving Show
 
@@ -390,9 +406,8 @@ order_ cond = modify $ \s -> s { qOrder = addClause cond (qOrder s) }
 having_ :: Exp SqlTag Bool -> Query r ()
 having_ cond = modify $ \s -> s { qHaving = addClause cond (qHaving s) }
 
-group_ :: Exp SqlTag Bool -> Query r ()
-group_ cond = modify $ \s -> s { qGroup = addClause cond (qGroup s) }
-
+group_ :: Field a => Exp SqlTag a -> Query r ()
+group_ cond = modify $ \s -> s { qGroup = addClause (GroupExp cond) (qGroup s) }
 
 addClause :: Monoid (Exp SqlTag a)
     => Exp SqlTag a
@@ -541,6 +556,7 @@ bindExp (TotalExp t) s n = bindExp t s n
 bindExp (App a b) s n = bindExp a s n >>= bindExp b s
 bindExp (Pure _) _ n = return n
 bindExp (CommaExp a b) s n = bindExp a s n >>= bindExp b s
+bindExp (GroupExp a) s n = bindExp a s n
 
 
 renderPrim :: forall v. Exp SqlTag v -> String
@@ -571,6 +587,7 @@ renderPrim (MinExp t) = concat ["MIN (", renderPrim t, ")"]
 renderPrim (SumExp t) = concat ["SUM (", renderPrim t, ")"]
 renderPrim (TotalExp t) = concat ["TOTAL (", renderPrim t, ")"]
 renderPrim (CommaExp a b) = concat [renderPrim a, ", ", renderPrim b]
+renderPrim (GroupExp a) = renderPrim a
 renderPrim (TableExp tbl ti) =
      let tiAs = renderTableInstance ti ++ "."
      in intercalate ", " $ map ((tiAs++) . fst) (tableFields tbl)

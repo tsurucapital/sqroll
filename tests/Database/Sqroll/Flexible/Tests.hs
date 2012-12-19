@@ -101,6 +101,8 @@ testJoins = withTmpSqroll $ \sqroll -> do
                     , Allocation (depts !! 1) (Just $ empls !! 2)
                     , Allocation (depts !! 3) (Just $ empls !! 3)
                     ]
+        expected3 = [("Clerical",2),("Engineering",1),("Finance",1)]
+        expected4 = [("Clerical",2),("Engineering",1),("Sales", 0),("Finance",1)]
 
     mapM_ (sqrollAppend_ sqroll) depts
     mapM_ (sqrollAppend_ sqroll) empls
@@ -118,6 +120,22 @@ testJoins = withTmpSqroll $ \sqroll -> do
         return $ Allocation <$> d <*> (Just <$> e)
     result2 <- sqrollGetList stmt2
     expected2 @=? result2
+
+    stmt3 <- makeFlexibleQuery sqroll $ do
+        d `InnerJoin` e <- from
+        on_ $ (d ^. DeptId) ==. (e ^. EmplDeptId)
+        group_ $ d ^. DeptId
+        return $ (,) <$> (d ^. DeptName) <*> (count $ e ^. EmplId)
+    result3 <- sqrollGetList stmt3
+    expected3 @=? result3
+
+    stmt4 <- makeFlexibleQuery sqroll $ do
+        d `LeftJoin` e <- from
+        on_ $ (d ^. DeptId) ==? (e ^?. EmplDeptId)
+        group_ $ d ^. DeptId
+        return $ (,) <$> (d ^. DeptName) <*> (count $ e ^?. EmplId)
+    result4 <- sqrollGetList stmt4
+    expected4 @=? result4
 
 
 
