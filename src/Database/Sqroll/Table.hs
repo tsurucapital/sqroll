@@ -21,8 +21,11 @@ module Database.Sqroll.Table
     , tableSelect
     , tablePoke
     , tablePeek
+    , tablePeekFrom
+    , tablePeekFromMaybe
     , tableRefers
     , tableMakeDefaults
+    , tableFields
 
       -- * Useful if you want to access raw fields
     , makeFieldNames
@@ -161,9 +164,17 @@ tablePoke (NamedTable _ table) stmt = \t -> go table t 1 >> return ()
         return (n + fieldColumns' fi)
 
 tablePeek :: forall t. NamedTable t -> SqlStmt -> IO t
-tablePeek (NamedTable _ table) stmt = do
-    (x, _) <- go table 1
-    return x
+tablePeek tbl stmt = fst <$> tablePeekFrom 1 tbl stmt
+
+tablePeekFromMaybe :: forall t. Int -> NamedTable t -> SqlStmt -> IO (Maybe t, Int)
+tablePeekFromMaybe startCol t@(NamedTable _ tbl) stmt = do
+   null <- sqlColumnIsNothing stmt startCol
+   if null
+        then return (Nothing, 1 + startCol + length (tableFields t))
+        else first Just <$> tablePeekFrom (startCol + 1) t stmt
+
+tablePeekFrom :: forall t. Int -> NamedTable t -> SqlStmt -> IO (t, Int)
+tablePeekFrom startCol (NamedTable _ table) stmt = go table startCol
   where
     go :: forall a. Table t a -> Int -> IO (a, Int)
     go (Map f t)     !n = liftM (first f) (go t n)

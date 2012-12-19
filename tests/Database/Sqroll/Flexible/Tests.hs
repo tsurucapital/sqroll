@@ -1,7 +1,9 @@
+{-# OPTIONS -fno-warn-missing-signatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Database.Sqroll.Flexible.Tests (
   tests
@@ -19,16 +21,29 @@ import Database.Sqroll.Tests.Util
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
+import Data.Text (Text)
 
 -- sample table in the db
 data TestTable = TestTable { tFoo :: Int, tBar :: Double } deriving (Show, Generic)
-
 instance HasTable TestTable
 $(deriveExtendedQueries ''TestTable)
+
+data Dept = Dept { deptId :: Int, deptName :: Text } deriving (Show, Eq, Generic)
+instance HasTable Dept
+$(deriveExtendedQueries ''Dept)
+
+data Empl = Empl { emplId :: Int, emplDeptId :: Int, emplName :: Text } deriving (Show, Eq, Generic)
+instance HasTable Empl
+$(deriveExtendedQueries ''Empl)
+
+_unusedOk = (tFoo, tBar, deptId, deptName, emplId, emplDeptId, emplName)
+_unusedOk2 = (DeptName, EmplId, EmplName, foo, bar, baz)
+
 
 tests :: Test
 tests = testGroup "Database.Sqroll.Flexible"
     [ testCase "testFlexible" testFlexible
+    , testCase "testJoins" testJoins
     ]
 
 testFlexible :: Assertion
@@ -54,64 +69,57 @@ testFlexible = withTmpSqroll $ \sqroll -> do
                    , ResultType 100 (Just 110.0) True
                    ]
     expected @=? result
-
-
--- createStmtX should just typecheck
-
-createStmt :: IO ()
-createStmt = do
-    _ <- makeFlexibleQuery undefined $ do
-        t `LeftJoin` r <- from
-        where_ $ (r ^?. TBar) >. just 100
-        where_ $ var 100 >. (t ^. TBar)
-        on_ ((t ^. TFoo) ==? (r ^?. TFoo))
-        order_ $ asc (t ^. TFoo)
-        return $ ResultType <$> (t ^. TFoo) <*> (r ^?. TBar +. just 10) <*> (var True) -- +. t ^. TBar *. var 10) <*. (var True)
-    return ()
-
-createStmt2 :: IO ()
-createStmt2 = do
-    _ <- makeFlexibleQuery undefined $ do
-        t1 `InnerJoin` t2 `InnerJoin` t3 <- from
-        on_ ((t1 ^. TFoo) ==. (t2 ^. TFoo))
-        on_ ((t2 ^. TFoo) ==. (t3 ^. TFoo))
-        return $ (,,) <$> (t1 ^. TFoo) <*> (t2 ^. TFoo) <*> (t3 ^. TFoo)
-    return ()
-
 {-
-createStmt3 :: IO ()
-createStmt3 = do
-    _ <- makeFlexibleQuery undefined $ do
-        (t1 :: Exp HaskTag TestTable) <- from
-        return $ t1
-    return ()
+data Dept = Dept { deptId :: Int, deptName :: Text } deriving (Show, Eq, Generic)
+data Empl = Empl { emplId :: Int, emplDeptId :: Int, emplName :: Text } deriving (Show, Eq, Generic)
 -}
 
-createStmt4 :: IO ()
-createStmt4 = do
-    _ <- makeFlexibleQuery undefined $ do
-        t1 `InnerJoin` t2 `InnerJoin` t3 `InnerJoin` t4 `InnerJoin` t5 `InnerJoin` t6 <- from
-        on_ ((t5 ^. TFoo) ==. (t6 ^. TFoo))
-        on_ ((t4 ^. TFoo) ==. (t5 ^. TFoo))
-        on_ ((t3 ^. TFoo) ==. (t4 ^. TFoo))
-        on_ ((t2 ^. TFoo) ==. (t3 ^. TFoo))
-        on_ ((t1 ^. TFoo) ==. (t2 ^. TFoo))
-        return $ (,,,,,) <$>  (t1 ^. TFoo) <*> (t2 ^. TFoo) <*> (t3 ^. TFoo) <*> (t4 ^. TFoo) <*> (t5 ^. TFoo) <*> (t6 ^. TFoo)
-    return ()
+data Allocation = Allocation Dept (Maybe Empl) deriving (Show, Eq)
 
-createStmt5 :: IO ()
-createStmt5 = do
-    _ <- makeFlexibleQuery undefined $ do
-        t1 `LeftJoin` t2 `LeftJoin` t3 `InnerJoin` t4 <- from
-        return $ (,,,) <$> (t1 ^. TFoo) <*> (t2 ^?. TFoo) <*> (t3 ^?. TFoo) <*> t4 ^?. TFoo
-    return ()
+testJoins :: Assertion
+testJoins = withTmpSqroll $ \sqroll -> do
+    let depts = [ Dept 1  "Clerical"
+                , Dept 10 "Engineering"
+                , Dept 11 "Sales"
+                , Dept 12 "Finance"
+                ]
+        empls = [ Empl 1 1 "Smith"
+                , Empl 2 1 "Jones"
+                , Empl 3 10 "Robinson"
+                , Empl 4 12 "Steinberg"
+                ]
 
-_unused_ok :: IO ()
-_unused_ok = do
-    _ <- undefined $ (createStmt, createStmt2, {- createStmt3, -} createStmt4, createStmt5)
-    _ <- undefined $ (tFoo, tBar, foo, bar, baz)
+        expected = [ Allocation (depts !! 0) (Just $ empls !! 0)
+                   , Allocation (depts !! 0) (Just $ empls !! 1)
+                   , Allocation (depts !! 1) (Just $ empls !! 2)
+                   , Allocation (depts !! 2) Nothing
+                   , Allocation (depts !! 3) (Just $ empls !! 3)
+                   ]
 
-    return ()
+        expected2 = [ Allocation (depts !! 0) (Just $ empls !! 0)
+                    , Allocation (depts !! 0) (Just $ empls !! 1)
+                    , Allocation (depts !! 1) (Just $ empls !! 2)
+                    , Allocation (depts !! 3) (Just $ empls !! 3)
+                    ]
+
+    mapM_ (sqrollAppend_ sqroll) depts
+    mapM_ (sqrollAppend_ sqroll) empls
+
+    stmt <- makeFlexibleQuery sqroll $ do
+        d `LeftJoin` e <- from
+        on_ $ (d ^. DeptId) ==? (e ^?. EmplDeptId)
+        return $ Allocation <$> d <*> e
+    result <- sqrollGetList stmt
+    expected @=? result
+
+    stmt2 <- makeFlexibleQuery sqroll $ do
+        d `InnerJoin` e <- from
+        on_ $ (d ^. DeptId) ==. (e ^. EmplDeptId)
+        return $ Allocation <$> d <*> (Just <$> e)
+    result2 <- sqrollGetList stmt2
+    expected2 @=? result2
+
+
 
 -- sample result datatype
 data ResultType = ResultType { foo :: Int, bar :: Maybe Double, baz :: Bool } deriving (Eq, Show)

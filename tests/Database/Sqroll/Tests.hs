@@ -40,7 +40,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testListFields"      testListFields
     , testCase "testRebindKey"       testRebindKey
     , testCase "testCustomQuery"     testCustomQuery
---    , testCase "testCustomQueryNT"   testCustomQueryNT
+    , testCase "testCustomQueryNT"   testCustomQueryNT
     ]
 
 testAppendTailUsers :: Assertion
@@ -211,20 +211,18 @@ testCustomQuery = withTmpSqroll $ \sqroll -> do
     users' <- sqrollGetList stmt
     (reverse expected) @=? users'
 
-{-
+
 testCustomQueryNT :: Assertion
 testCustomQueryNT = withTmpSqroll $ \sqroll -> do
+
     let dogs = [Dog $ Kitten (Just . T.pack $ "foo" ++ show n) | n <- [1..10 :: Int]]
-        cats = [Kitten (Just . T.pack $ "bar" ++ show n) | n <- [1..10 :: Int]]
 
     mapM_ (sqrollAppend_ sqroll) dogs
-    mapM_ (sqrollAppend_ sqroll) cats
 
-    let condD = DogKittenWoof ==. Just "foo10"
-        condC = KittenWoof ==. Just "bar1"
+    stmt <- makeFlexibleQuery sqroll $ do
+        t <- from
+        where_ $ (t ^. DogKittenWoof) ==. (var $ Just "foo10")
+        return t
 
-    dog' <- makeFlexibleQuery sqroll >>= sqrollGetList
-    cat' <- makeFlexibleQuery sqroll >>= sqrollGetList
-
-    ([last dogs], [head cats]) @=? (dog', cat')
-    -}
+    dogs' <- sqrollGetList stmt
+    (filter ((==) (Just "foo10") . kittenWoof . unDog) dogs) @=? dogs'

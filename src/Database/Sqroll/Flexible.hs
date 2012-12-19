@@ -34,6 +34,7 @@ import Data.Monoid
 import Data.Char (toUpper)
 import Data.List (intercalate)
 
+import Database.Sqroll.Table (tableFields, tablePeekFrom, tablePeekFromMaybe)
 import Database.Sqroll.Table.Field
 import Database.Sqroll.Table.Naming (makeFieldName)
 import Database.Sqroll.Internal
@@ -130,9 +131,10 @@ makeFlexibleQuery sqroll constructedResult = do
 
         -- All other Exps are peekable as fields...
         selectPeek AvgExp{} s n = peekResult s n
-        selectPeek TableExp{} _ _ = error "TableExp"
+        selectPeek (TableExp tbl _) s n = tablePeekFrom n tbl s
+        selectPeek (MTableExp tbl _) s n = tablePeekFromMaybe n tbl s
         selectPeek DbValue{} s n = peekResult s n
-        selectPeek DirExp{} _ _ = error "DirExp"
+        selectPeek DirExp{} _ _ = error "peek DirExp"
         selectPeek AddExp{} s n = peekResult s n
         selectPeek SubExp{} s n = peekResult s n
         selectPeek MulExp{} s n = peekResult s n
@@ -166,7 +168,8 @@ collectFields (Pure _)  = []
 collectFields (App a b) = collectFields a ++ collectFields b
 collectFields (RawValue f) = [renderPrim (RawValue f)]
 collectFields (JustValue f) = [renderPrim (JustValue f)]
-collectFields (TableExp ti) = [renderPrim (TableExp ti)]
+collectFields (TableExp tbl ti) = [renderPrim (TableExp tbl ti)]
+collectFields (MTableExp tbl ti) = [renderPrim (MTableExp tbl ti)]
 collectFields (DbValue s) = [s]
 collectFields (AddExp a b) = [renderPrim (AddExp a b)]
 collectFields (SubExp a b) = [renderPrim (SubExp a b)]
@@ -228,7 +231,8 @@ data HaskTag
 data Exp t a where
     RawValue  :: Field a => a -> Exp t a
     JustValue :: Field a => a -> Exp t (Maybe a)
-    TableExp  :: TableInstance (NamedTable full) -> Exp t full
+    TableExp  :: HasTable full => NamedTable full -> TableInstance (NamedTable full) -> Exp t full
+    MTableExp :: HasTable full => NamedTable full -> TableInstance (NamedTable full) -> Exp t (Maybe full)
     DbValue   :: Field a => String -> Exp t a
     
     -- math
@@ -286,13 +290,13 @@ instance Monoid (Exp SqlTag Dir) where
 data TableInstance t = TableInstance Int deriving Show
 
 (^.) :: (Field (Component (Full tag) tag), IsTag tag)
-     => Exp SqlTag (Full tag) -> tag -> Exp t (Component (Full tag) tag)
-(^.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
+     => Exp t1 (Full tag) -> tag -> Exp t2 (Component (Full tag) tag)
+(^.) (TableExp _ tbl) tag = DbValue (renderTableTag tbl tag)
 (^.) _ _ = error "WAT"
 
 (^?.) :: (Field (Component (Full tag) tag), IsTag tag)
-      => Exp SqlTag (Maybe (Full tag)) -> tag -> Exp t (Maybe (Component (Full tag) tag))
-(^?.) (TableExp tbl) tag = DbValue (renderTableTag tbl tag)
+      => Exp t1 (Maybe (Full tag)) -> tag -> Exp t2 (Maybe (Component (Full tag) tag))
+(^?.) (MTableExp _ tbl) tag = DbValue (renderTableTag tbl tag)
 (^?.) _ _ = error "WAT"
 
 
@@ -435,9 +439,9 @@ class FromMaybe f where
     constructFromMaybe :: f -> ActiveJoin
 
 instance (HasTable t, From j) => From ((Exp et t) `InnerJoin` j) where
-    blankFromInstance n = (TableExp $ TableInstance n) `InnerJoin` (blankFromInstance $ n + 1)
-    constructFrom ((TableExp ti) `InnerJoin` j) =
-        let joinTableName = tableName (table :: NamedTable t)
+    blankFromInstance n = (TableExp (table :: NamedTable t) (TableInstance n)) `InnerJoin` (blankFromInstance $ n + 1)
+    constructFrom ((TableExp tbl ti) `InnerJoin` j) =
+        let joinTableName = tableName tbl
             joinTableAs = renderTableInstance ti
             joinType = "JOIN"
             joinCondition = Nothing
@@ -446,9 +450,9 @@ instance (HasTable t, From j) => From ((Exp et t) `InnerJoin` j) where
     constructFrom _ = error "WAT"
 
 instance (HasTable t, FromMaybe j) => From ((Exp et t) `LeftJoin` j) where
-    blankFromInstance n = (TableExp $ TableInstance n) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
-    constructFrom ((TableExp ti) `LeftJoin` j) =
-        let joinTableName = tableName (table :: NamedTable t)
+    blankFromInstance n = (TableExp (table :: NamedTable t) (TableInstance n)) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
+    constructFrom ((TableExp tbl ti) `LeftJoin` j) =
+        let joinTableName = tableName tbl
             joinTableAs = renderTableInstance ti
             joinType = "LEFT JOIN"
             joinCondition = Nothing
@@ -457,9 +461,9 @@ instance (HasTable t, FromMaybe j) => From ((Exp et t) `LeftJoin` j) where
     constructFrom _ = error "WAT"
 
 instance (HasTable t, FromMaybe j) => FromMaybe ((Exp et (Maybe t)) `LeftJoin` j) where
-    blankFromInstanceMaybe n = (TableExp $ TableInstance n) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
-    constructFromMaybe ((TableExp ti) `LeftJoin` j) =
-        let joinTableName = tableName (table :: NamedTable t)
+    blankFromInstanceMaybe n = (MTableExp (table :: NamedTable t) (TableInstance n)) `LeftJoin` (blankFromInstanceMaybe $ n + 1)
+    constructFromMaybe ((MTableExp tbl ti) `LeftJoin` j) =
+        let joinTableName = tableName tbl
             joinTableAs = renderTableInstance ti
             joinType = "LEFT JOIN"
             joinCondition = Nothing
@@ -468,9 +472,9 @@ instance (HasTable t, FromMaybe j) => FromMaybe ((Exp et (Maybe t)) `LeftJoin` j
     constructFromMaybe _ = error "WAT"
 
 instance (HasTable t, FromMaybe j) => FromMaybe ((Exp et (Maybe t)) `InnerJoin` j) where
-    blankFromInstanceMaybe n = (TableExp $ TableInstance n) `InnerJoin` (blankFromInstanceMaybe $ n + 1)
-    constructFromMaybe ((TableExp ti) `InnerJoin` j) =
-        let joinTableName = tableName (table :: NamedTable t)
+    blankFromInstanceMaybe n = (MTableExp (table :: NamedTable t) (TableInstance n)) `InnerJoin` (blankFromInstanceMaybe $ n + 1)
+    constructFromMaybe ((MTableExp tbl ti) `InnerJoin` j) =
+        let joinTableName = tableName tbl
             joinTableAs = renderTableInstance ti
             joinType = "JOIN"
             joinCondition = Nothing
@@ -479,17 +483,17 @@ instance (HasTable t, FromMaybe j) => FromMaybe ((Exp et (Maybe t)) `InnerJoin` 
     constructFromMaybe _ = error "WAT"
 
 instance HasTable t => FromMaybe (Exp et (Maybe t)) where
-    blankFromInstanceMaybe n = TableExp $ TableInstance n
-    constructFromMaybe (TableExp ti) =
-        let joinTableName = tableName (table :: NamedTable t)
+    blankFromInstanceMaybe n = MTableExp (table :: NamedTable t) (TableInstance n)
+    constructFromMaybe (MTableExp tbl ti) =
+        let joinTableName = tableName tbl
             joinTableAs = renderTableInstance ti
         in LastJoin {..}
     constructFromMaybe _ = error "WAT"
 
 instance HasTable t => From (Exp et t) where
-    blankFromInstance n = TableExp $ TableInstance n
-    constructFrom (TableExp ti) =
-        let joinTableName = tableName (table :: NamedTable t)
+    blankFromInstance n = TableExp (table :: NamedTable t) (TableInstance n)
+    constructFrom (TableExp tbl ti) =
+        let joinTableName = tableName tbl
             joinTableAs = renderTableInstance ti
         in LastJoin {..}
     constructFrom _ = error "WAT"
@@ -526,7 +530,8 @@ bindExp (AndExp a b) s n = bindExp a s n >>= bindExp b s
 bindExp (OrExp a b) s n = bindExp a s n >>= bindExp b s
 bindExp (NotExp a) s n = bindExp a s n
 bindExp (DirExp _ a) s n = bindExp a s n
-bindExp (TableExp _t) _ _ = error "TODO: bind full table"
+bindExp (TableExp _ _) _ n = return n
+bindExp (MTableExp _ _) _ n = return n
 bindExp (AvgExp t) s n = bindExp t s n
 bindExp (CountExp t) s n = bindExp t s n
 bindExp (MaxExp t) s n = bindExp t s n
@@ -538,7 +543,7 @@ bindExp (Pure _) _ n = return n
 bindExp (CommaExp a b) s n = bindExp a s n >>= bindExp b s
 
 
-renderPrim :: Exp SqlTag v -> String
+renderPrim :: forall v. Exp SqlTag v -> String
 renderPrim (RawValue a) = intercalate "," (map (const "?") $ fieldTypes a)
 renderPrim (JustValue a) = intercalate "," (map (const "?") $ fieldTypes a)
 renderPrim (DbValue a) = a
@@ -559,7 +564,6 @@ renderPrim (OrExp  e1 e2) = renderAct e1 e2 "OR"
 renderPrim (NotExp e) = concat ["NOT (", renderPrim e, ")"]
 renderPrim (DirExp Asc e) = concat ["(", renderPrim e,  ") ASC"]
 renderPrim (DirExp Desc e) = concat ["(", renderPrim e,  ") DESC"]
-renderPrim (TableExp _t) = error "TODO: render and bind full set of fields"
 renderPrim (AvgExp t) = concat ["AVG (", renderPrim t, ")"]
 renderPrim (CountExp t) = concat ["COUNT (", renderPrim t, ")"]
 renderPrim (MaxExp t) = concat ["MAX (", renderPrim t, ")"]
@@ -567,6 +571,12 @@ renderPrim (MinExp t) = concat ["MIN (", renderPrim t, ")"]
 renderPrim (SumExp t) = concat ["SUM (", renderPrim t, ")"]
 renderPrim (TotalExp t) = concat ["TOTAL (", renderPrim t, ")"]
 renderPrim (CommaExp a b) = concat [renderPrim a, ", ", renderPrim b]
+renderPrim (TableExp tbl ti) =
+     let tiAs = renderTableInstance ti ++ "."
+     in intercalate ", " $ map ((tiAs++) . fst) (tableFields tbl)
+renderPrim (MTableExp tbl ti) =
+     let tiAs = renderTableInstance ti ++ "."
+     in tiAs ++ "rowid, " ++ (intercalate ", " $ map ((tiAs++) . fst) (tableFields tbl))
 
 renderAct :: Exp SqlTag v1 -> Exp SqlTag v2 -> String -> String
 renderAct e1 e2 s = concat [" ( ", renderPrim e1, s, renderPrim e2, " ) "]
