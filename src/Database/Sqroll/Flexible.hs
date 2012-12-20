@@ -25,7 +25,7 @@ module Database.Sqroll.Flexible
     , where_, order_, having_, group_
     , asc, desc
     , InnerJoin (..), LeftJoin (..)
-    , count
+    , count, total, maxval, minval, sumval, avg
     ) where
 
 import Control.Arrow (first)
@@ -283,6 +283,22 @@ data Exp t a where
 
 count :: Field a => Exp SqlTag a -> Exp t Int
 count = CountExp
+
+total :: Field a => Exp SqlTag a -> Exp t Double
+total = TotalExp
+
+avg :: Field a => Exp SqlTag a -> Exp t a
+avg = AvgExp
+
+maxval :: Field a => Exp SqlTag a -> Exp t a
+maxval = MaxExp
+
+minval :: Field a => Exp SqlTag a -> Exp t a
+minval = MinExp
+
+sumval :: Field a => Exp SqlTag a -> Exp t a
+sumval = SumExp
+
 
 instance Functor (Exp HaskTag) where
     fmap f e = Pure f `App` e
