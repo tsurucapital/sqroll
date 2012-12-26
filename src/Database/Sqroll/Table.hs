@@ -167,9 +167,9 @@ tablePeek :: forall t. NamedTable t -> SqlStmt -> IO t
 tablePeek tbl stmt = fst <$> tablePeekFrom 1 tbl stmt
 
 tablePeekFromMaybe :: forall t. Int -> NamedTable t -> SqlStmt -> IO (Maybe t, Int)
-tablePeekFromMaybe startCol t@(NamedTable _ tbl) stmt = do
-   null <- sqlColumnIsNothing stmt startCol
-   if null
+tablePeekFromMaybe startCol t stmt = do
+   nullRow <- sqlColumnIsNothing stmt startCol
+   if nullRow
         then return (Nothing, 1 + startCol + length (tableFields t))
         else first Just <$> tablePeekFrom (startCol + 1) t stmt
 
