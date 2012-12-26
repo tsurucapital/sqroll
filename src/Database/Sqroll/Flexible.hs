@@ -64,8 +64,12 @@ LIKE ???
 makeFlexibleQuery :: Sqroll -> Query (Exp HaskTag t) -> IO (Stmt t ())
 makeFlexibleQuery sqroll constructedResult = do
         let (r, q) = runState (runQ constructedResult) emptyQuery
+        stmt <- makeQueryAndBindIt sqroll r q
+        return $ Stmt (stmt, mkPeeker r)
 
-            rawQuery = concat $ [ "SELECT ", intercalate ", " (collectFields r)
+makeQueryAndBindIt :: Sqroll -> Exp HaskTag a -> QData -> IO SqlFStmt
+makeQueryAndBindIt sqroll r q = do
+        let rawQuery = concat $ [ "SELECT ", intercalate ", " (collectFields r)
                                 , " FROM ", compileJoin (qFrom q)
                                 , mkWhere (fst $ qWhere q)
                                 , mkGroup (fst $ qGroup q)
@@ -91,77 +95,75 @@ makeFlexibleQuery sqroll constructedResult = do
                     Just cond -> bindExp cond raw n''
                     _ -> return n
             return ()
+        return stmt
 
-        return $ Stmt (stmt, mkPeeker r)
-    where
-        mkWhere :: [String] -> String
-        mkWhere [] = []
-        mkWhere conds = " WHERE " ++ intercalate " AND " conds
+mkWhere :: [String] -> String
+mkWhere [] = []
+mkWhere conds = " WHERE " ++ intercalate " AND " conds
 
-        mkHaving :: [String] -> String
-        mkHaving [] = []
-        mkHaving conds = " HAVING " ++ intercalate " AND " conds
-
-
-        mkGroup :: [String] -> String
-        mkGroup [] = []
-        mkGroup conds = " GROUP BY " ++ intercalate " , " conds
+mkHaving :: [String] -> String
+mkHaving [] = []
+mkHaving conds = " HAVING " ++ intercalate " AND " conds
 
 
-        mkOrder :: [String] -> String
-        mkOrder [] = []
-        mkOrder conds = " ORDER BY " ++ intercalate " , " conds
+mkGroup :: [String] -> String
+mkGroup [] = []
+mkGroup conds = " GROUP BY " ++ intercalate " , " conds
 
-        mkPeeker :: Exp HaskTag t -> SqlStmt -> IO (Maybe t)
-        mkPeeker r stmt = do
-                hasData <- sqlStep stmt
-                result <- if hasData
-                    then (Just . fst) `fmap` selectPeek r stmt 0
-                    else do sqlReset stmt
-                            return Nothing
-                return result
 
-        selectPeek :: Exp HaskTag r -> SqlStmt -> Int -> IO (r, Int)
-        selectPeek (Pure x) _ n = return (x, n)
-        selectPeek (App a b) stmt n = do
-            (ar, n')  <- selectPeek a stmt n
-            (br, n'') <- selectPeek b stmt n'
-            return (ar br , n'')
-        selectPeek (RawValue x) _ n = return (x, n)
-        selectPeek (JustValue x) _ n = return (Just x, n)
+mkOrder :: [String] -> String
+mkOrder [] = []
+mkOrder conds = " ORDER BY " ++ intercalate " , " conds
 
-        -- All other Exps are peekable as fields...
-        selectPeek AvgExp{} s n = peekResult s n
-        selectPeek (TableExp tbl _) s n = tablePeekFrom n tbl s
-        selectPeek (MTableExp tbl _) s n = tablePeekFromMaybe n tbl s
-        selectPeek DbValue{} s n = peekResult s n
-        selectPeek DirExp{} _ _ = error "peek DirExp"
-        selectPeek AddExp{} s n = peekResult s n
-        selectPeek SubExp{} s n = peekResult s n
-        selectPeek MulExp{} s n = peekResult s n
-        selectPeek DivExp{} s n = peekResult s n
-        selectPeek CmpExp{} s n = peekResult s n
-        selectPeek Cmp_MExp{} s n = peekResult s n
-        selectPeek CmpM_Exp{} s n = peekResult s n
-        selectPeek CmpMMExp{} s n = peekResult s n
-        selectPeek GtExp{} s n = peekResult s n
-        selectPeek GteExp{} s n = peekResult s n
-        selectPeek LtExp{} s n = peekResult s n
-        selectPeek LteExp{} s n = peekResult s n
-        selectPeek CountExp{} s n = peekResult s n
-        selectPeek SumExp{} s n = peekResult s n
-        selectPeek MaxExp{} s n = peekResult s n
-        selectPeek MinExp{} s n = peekResult s n
-        selectPeek TotalExp{} s n = peekResult s n
-        selectPeek AndExp{} s n = peekResult s n
-        selectPeek OrExp{} s n = peekResult s n
-        selectPeek NotExp{} s n = peekResult s n
+mkPeeker :: Exp HaskTag t -> SqlStmt -> IO (Maybe t)
+mkPeeker r stmt = do
+        hasData <- sqlStep stmt
+        result <- if hasData
+            then (Just . fst) `fmap` selectPeek r stmt 0
+            else do sqlReset stmt
+                    return Nothing
+        return result
 
-        peekResult :: Field r => SqlStmt -> Int -> IO (r, Int)
-        peekResult  stmt n = do
-            p <- fieldPeek stmt n
-            return (p, n + length (fieldTypes p))
-            -- undefined
+selectPeek :: Exp HaskTag r -> SqlStmt -> Int -> IO (r, Int)
+selectPeek (Pure x) _ n = return (x, n)
+selectPeek (App a b) stmt n = do
+    (ar, n')  <- selectPeek a stmt n
+    (br, n'') <- selectPeek b stmt n'
+    return (ar br , n'')
+selectPeek (RawValue x) _ n = return (x, n)
+selectPeek (JustValue x) _ n = return (Just x, n)
+
+-- All other Exps are peekable as fields...
+selectPeek AvgExp{} s n = peekResult s n
+selectPeek (TableExp tbl _) s n = tablePeekFrom n tbl s
+selectPeek (MTableExp tbl _) s n = tablePeekFromMaybe n tbl s
+selectPeek DbValue{} s n = peekResult s n
+selectPeek DirExp{} _ _ = error "peek DirExp"
+selectPeek AddExp{} s n = peekResult s n
+selectPeek SubExp{} s n = peekResult s n
+selectPeek MulExp{} s n = peekResult s n
+selectPeek DivExp{} s n = peekResult s n
+selectPeek CmpExp{} s n = peekResult s n
+selectPeek Cmp_MExp{} s n = peekResult s n
+selectPeek CmpM_Exp{} s n = peekResult s n
+selectPeek CmpMMExp{} s n = peekResult s n
+selectPeek GtExp{} s n = peekResult s n
+selectPeek GteExp{} s n = peekResult s n
+selectPeek LtExp{} s n = peekResult s n
+selectPeek LteExp{} s n = peekResult s n
+selectPeek CountExp{} s n = peekResult s n
+selectPeek SumExp{} s n = peekResult s n
+selectPeek MaxExp{} s n = peekResult s n
+selectPeek MinExp{} s n = peekResult s n
+selectPeek TotalExp{} s n = peekResult s n
+selectPeek AndExp{} s n = peekResult s n
+selectPeek OrExp{} s n = peekResult s n
+selectPeek NotExp{} s n = peekResult s n
+
+peekResult :: Field r => SqlStmt -> Int -> IO (r, Int)
+peekResult  stmt n = do
+    p <- fieldPeek stmt n
+    return (p, n + length (fieldTypes p))
 
 
 collectFields :: Exp t a -> [String]
