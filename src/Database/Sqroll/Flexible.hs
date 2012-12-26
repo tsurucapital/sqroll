@@ -17,12 +17,14 @@
 
 module Database.Sqroll.Flexible
     ( makeFlexibleQuery
+    , makeFlexibleQuery'
     , deriveExtendedQueries
     , (^.), (^?.), (*.), (/.), (+.), (-.), (==.), (?==?), (?==), (==?)
     , (>.), (>=.), (<.), (<=.), (&&.), (||.), (!.)
     , var, just
     , from, on_
     , where_, order_, having_, group_
+    , newBind
     , asc, desc
     , InnerJoin (..), LeftJoin (..)
     , count, total, maxval, minval, sumval, avg
@@ -59,6 +61,76 @@ http://www.sqlite.org/lang_datefunc.html ?????
 LIKE ???
 }}} -}
 
+class BinderSet s where
+    type StmtBinder s
+    curryStmt :: SqlFStmt -> s -> StmtBinder s
+
+-- BinderSet instances {{{
+instance BinderSet  ( SqlFStmt -> a -> IO ()) where
+    type StmtBinder ( SqlFStmt -> a -> IO ()) = ( a -> IO ())
+    curryStmt st a = a st
+
+instance (BinderSet a, BinderSet b)
+        => BinderSet (a, b) where
+    type StmtBinder (a, b) =
+        ( StmtBinder a, StmtBinder b)
+    curryStmt st (a, b) =
+        ( curryStmt st a, curryStmt st b)
+
+instance (BinderSet a, BinderSet b, BinderSet c)
+        => BinderSet (a, b, c) where
+    type StmtBinder (a, b, c) =
+        ( StmtBinder a, StmtBinder b, StmtBinder c)
+    curryStmt st (a, b, c) =
+        ( curryStmt st a, curryStmt st b, curryStmt st c)
+
+instance ( BinderSet a, BinderSet b, BinderSet c, BinderSet d)
+        => BinderSet (a, b, c, d) where
+    type StmtBinder (a, b, c, d) =
+        ( StmtBinder a, StmtBinder b, StmtBinder c, StmtBinder d)
+    curryStmt st (a, b, c, d) =
+        ( curryStmt st a, curryStmt st b, curryStmt st c, curryStmt st d)
+
+instance ( BinderSet a, BinderSet b, BinderSet c, BinderSet d
+         , BinderSet e)
+        => BinderSet (a, b, c, d, e) where
+    type StmtBinder (a, b, c, d, e) =
+        ( StmtBinder a, StmtBinder b, StmtBinder c, StmtBinder d
+        , StmtBinder e)
+    curryStmt st (a, b, c, d, e) =
+        ( curryStmt st a, curryStmt st b, curryStmt st c, curryStmt st d
+        , curryStmt st e)
+
+instance ( BinderSet a, BinderSet b, BinderSet c, BinderSet d
+         , BinderSet e, BinderSet f)
+        => BinderSet (a, b, c, d, e, f) where
+    type StmtBinder (a, b, c, d, e, f) =
+        ( StmtBinder a, StmtBinder b, StmtBinder c, StmtBinder d
+        , StmtBinder e, StmtBinder f)
+    curryStmt st (a, b, c, d, e, f) =
+        ( curryStmt st a, curryStmt st b, curryStmt st c, curryStmt st d
+        , curryStmt st e, curryStmt st f)
+
+instance ( BinderSet a, BinderSet b, BinderSet c, BinderSet d
+         , BinderSet e, BinderSet f, BinderSet g)
+        => BinderSet (a, b, c, d, e, f, g) where
+    type StmtBinder (a, b, c, d, e, f, g) =
+        ( StmtBinder a, StmtBinder b, StmtBinder c, StmtBinder d
+        , StmtBinder e, StmtBinder f, StmtBinder g)
+    curryStmt st (a, b, c, d, e, f, g) =
+        ( curryStmt st a, curryStmt st b, curryStmt st c, curryStmt st d
+        , curryStmt st e, curryStmt st f, curryStmt st g)
+
+instance ( BinderSet a, BinderSet b, BinderSet c, BinderSet d
+         , BinderSet e, BinderSet f, BinderSet g, BinderSet h)
+        => BinderSet (a, b, c, d, e, f, g, h) where
+    type StmtBinder (a, b, c, d, e, f, g, h) =
+        ( StmtBinder a, StmtBinder b, StmtBinder c, StmtBinder d
+        , StmtBinder e, StmtBinder f, StmtBinder g, StmtBinder h)
+    curryStmt st (a, b, c, d, e, f, g, h) =
+        ( curryStmt st a, curryStmt st b, curryStmt st c, curryStmt st d
+        , curryStmt st e, curryStmt st f, curryStmt st g, curryStmt st h)
+-- }}}
 
 
 makeFlexibleQuery :: Sqroll -> Query (Exp HaskTag t) -> IO (Stmt t ())
@@ -66,6 +138,15 @@ makeFlexibleQuery sqroll constructedResult = do
         let (r, q) = runState (runQ constructedResult) emptyQuery
         stmt <- makeQueryAndBindIt sqroll r q
         return $ Stmt (stmt, mkPeeker r)
+
+-- | In addition to regular statement it returns set of rebinders to allow reconfigure statement
+-- after it was created. Set of rebinders can be represented either as single rebinder or
+-- as arbitrary tuple structure of them
+makeFlexibleQuery' :: BinderSet c => Sqroll -> Query (Exp HaskTag t, c) -> IO (Stmt t (), StmtBinder c)
+makeFlexibleQuery' sqroll constructedResult = do
+        let ((r, binders), q) = runState (runQ constructedResult) emptyQuery
+        stmt <- makeQueryAndBindIt sqroll r q
+        return (Stmt (stmt, mkPeeker r), curryStmt stmt binders)
 
 makeQueryAndBindIt :: Sqroll -> Exp HaskTag a -> QData -> IO SqlFStmt
 makeQueryAndBindIt sqroll r q = do
@@ -159,6 +240,7 @@ selectPeek TotalExp{} s n = peekResult s n
 selectPeek AndExp{} s n = peekResult s n
 selectPeek OrExp{} s n = peekResult s n
 selectPeek NotExp{} s n = peekResult s n
+selectPeek BindExp{} s n = peekResult s n
 
 peekResult :: Field r => SqlStmt -> Int -> IO (r, Int)
 peekResult  stmt n = do
@@ -198,6 +280,7 @@ collectFields (OrExp a b) = [renderPrim (OrExp a b)]
 collectFields (NotExp a) = [renderPrim (NotExp a)]
 collectFields (CommaExp a b) = [renderPrim (CommaExp a b)]
 collectFields (GroupExp a) = [renderPrim (GroupExp a)]
+collectFields (BindExp a i) = [renderCustomBind a i]
 
 emptyQuery :: QData
 emptyQuery = QData {..}
@@ -207,7 +290,7 @@ emptyQuery = QData {..}
         qOrder = ([], Nothing)
         qHaving = ([], Nothing)
         qGroup = ([], Nothing)
-        qNextAlias = 1
+        qNextBind = 1
 
 data QData = QData
     { qFrom :: ActiveJoin
@@ -215,7 +298,7 @@ data QData = QData
     , qOrder :: ([String], Maybe (Exp SqlTag Dir))
     , qHaving :: ([String], Maybe (Exp SqlTag Bool))
     , qGroup :: ([String], Maybe (Exp SqlTag GroupBy))
-    , qNextAlias :: Int
+    , qNextBind :: Int
     }
 
 data GroupBy
@@ -274,6 +357,8 @@ data Exp t a where
     MinExp    :: Field a => Exp SqlTag a -> Exp t a
     SumExp    :: Field a => Exp SqlTag a -> Exp t a
     TotalExp  :: Field a => Exp SqlTag a -> Exp t Double
+
+    BindExp   :: Field a => a -> Int -> Exp t a
 
     CommaExp  :: Exp SqlTag a -> Exp SqlTag a -> Exp SqlTag a
 
@@ -414,6 +499,17 @@ from = do
     let r = blankFromInstance 1
     modify $ \s -> s { qFrom = constructFrom r }
     return r
+
+newBind :: Field a => a -> Query (Exp t a, SqlFStmt -> a -> IO ())
+newBind a = do
+        idx <- gets qNextBind
+        modify $ \s -> s { qNextBind = qNextBind s + 1 }
+        return $ (BindExp a idx, binder idx)
+    where
+        binder :: Field a => Int -> SqlFStmt -> a -> IO ()
+        binder bindIdx stmt val = withForeignPtr stmt $ \raw -> do
+            idx <- sqlBindParamIndex raw (":bind" ++ show bindIdx)
+            fieldPoke raw idx val
 
 where_ :: Exp SqlTag Bool -> Query ()
 where_ cond = modify $ \s -> s { qWhere = addClause cond (qWhere s) }
@@ -575,6 +671,7 @@ bindExp (App a b) s n = bindExp a s n >>= bindExp b s
 bindExp (Pure _) _ n = return n
 bindExp (CommaExp a b) s n = bindExp a s n >>= bindExp b s
 bindExp (GroupExp a) s n = bindExp a s n
+bindExp (BindExp f _) s n = fieldPoke s n f >> return (n + length (fieldTypes f))
 
 
 renderPrim :: forall v. Exp SqlTag v -> String
@@ -606,12 +703,19 @@ renderPrim (SumExp t) = concat ["SUM (", renderPrim t, ")"]
 renderPrim (TotalExp t) = concat ["TOTAL (", renderPrim t, ")"]
 renderPrim (CommaExp a b) = concat [renderPrim a, ", ", renderPrim b]
 renderPrim (GroupExp a) = renderPrim a
+renderPrim (BindExp a i) = renderCustomBind a i
 renderPrim (TableExp tbl ti) =
      let tiAs = renderTableInstance ti ++ "."
      in intercalate ", " $ map ((tiAs++) . fst) (tableFields tbl)
 renderPrim (MTableExp tbl ti) =
      let tiAs = renderTableInstance ti ++ "."
      in tiAs ++ "rowid, " ++ (intercalate ", " $ map ((tiAs++) . fst) (tableFields tbl))
+
+renderCustomBind :: Field a => a -> Int -> String
+renderCustomBind a i = let base = " :bind" ++ show i ++ " "
+                           l = length $ fieldTypes a
+                           extra = intercalate "," (replicate (l-1) "?")
+                       in if l == 1 then base else concat [base, ",", extra]
 
 renderAct :: Exp SqlTag v1 -> Exp SqlTag v2 -> String -> String
 renderAct e1 e2 s = concat [" ( ", renderPrim e1, s, renderPrim e2, " ) "]

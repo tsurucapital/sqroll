@@ -44,6 +44,7 @@ tests :: Test
 tests = testGroup "Database.Sqroll.Flexible"
     [ testCase "testFlexible" testFlexible
     , testCase "testJoins" testJoins
+    , testCase "testRebinds" testRebinds
     ]
 
 testFlexible :: Assertion
@@ -136,6 +137,46 @@ testJoins = withTmpSqroll $ \sqroll -> do
         return $ (,) <$> (d ^. DeptName) <*> (count $ e ^?. EmplId)
     result4 <- sqrollGetList stmt4
     expected4 @=? result4
+
+testRebinds :: Assertion
+testRebinds = withTmpSqroll $ \sqroll -> do
+    let depts = [ Dept 1  "Clerical"
+                , Dept 10 "Engineering"
+                , Dept 11 "Sales"
+                , Dept 12 "Finance"
+                ]
+        empls = [ Empl 1 1 "Smith"
+                , Empl 2 1 "Jones"
+                , Empl 3 10 "Robinson"
+                , Empl 4 12 "Steinberg"
+                ]
+
+    mapM_ (sqrollAppend_ sqroll) depts
+    mapM_ (sqrollAppend_ sqroll) empls
+
+    (stmt, setDept) <- makeFlexibleQuery' sqroll $ do
+        dept `InnerJoin` empl <- from
+        (deptNameParam, deptNameBind) <- newBind "Clerical"
+
+        group_ $ dept ^. DeptId
+        on_ $ dept ^. DeptId ==. empl ^. EmplDeptId
+        where_ $ dept ^. DeptName ==. deptNameParam
+
+        return $ ((,) <$> (dept ^. DeptName) <*> (count $ empl ^. EmplId), deptNameBind)
+
+
+    result <- sqrollGetList stmt
+    [("Clerical", 2)] @=? result
+
+    setDept "Engineering"
+    result2 <- sqrollGetList stmt
+    [("Engineering", 1)] @=? result2
+
+    setDept "Sales"
+    result3 <- sqrollGetList stmt
+    [] @=? result3
+
+
 
 
 
