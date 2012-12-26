@@ -46,8 +46,8 @@ import Foreign.ForeignPtr
 
 import Language.Haskell.TH hiding (Stmt, Exp, runQ)
 
-newtype Query r a = Query { runQ :: State (QData r) a }
-    deriving (Monad, MonadState (QData r))
+newtype Query a = Query { runQ :: State QData a }
+    deriving (Monad, MonadState QData)
 
 {- {{{
 
@@ -61,7 +61,7 @@ LIKE ???
 
 
 
-makeFlexibleQuery :: a ~ (Exp HaskTag t) => Sqroll -> Query a a -> IO (Stmt t ())
+makeFlexibleQuery :: Sqroll -> Query (Exp HaskTag t) -> IO (Stmt t ())
 makeFlexibleQuery sqroll constructedResult = do
         let (r, q) = runState (runQ constructedResult) emptyQuery
 
@@ -197,7 +197,7 @@ collectFields (NotExp a) = [renderPrim (NotExp a)]
 collectFields (CommaExp a b) = [renderPrim (CommaExp a b)]
 collectFields (GroupExp a) = [renderPrim (GroupExp a)]
 
-emptyQuery :: QData r
+emptyQuery :: QData
 emptyQuery = QData {..}
     where
         qFrom = error "From was not specified yet"
@@ -207,7 +207,7 @@ emptyQuery = QData {..}
         qGroup = ([], Nothing)
         qNextAlias = 1
 
-data QData r = QData
+data QData = QData
     { qFrom :: ActiveJoin
     , qWhere :: ([String], Maybe (Exp SqlTag Bool))
     , qOrder :: ([String], Maybe (Exp SqlTag Dir))
@@ -407,22 +407,22 @@ compileJoin aj = compileJoinR True aj
                    ] ++ " " ++ compileJoinR False (joinTo j)
         compileJoinR _ LastJoin{} = ""
 
-from :: From f => Query r f
+from :: From f => Query f
 from = do
     let r = blankFromInstance 1
     modify $ \s -> s { qFrom = constructFrom r }
     return r
 
-where_ :: Exp SqlTag Bool -> Query r ()
+where_ :: Exp SqlTag Bool -> Query ()
 where_ cond = modify $ \s -> s { qWhere = addClause cond (qWhere s) }
 
-order_ :: Exp SqlTag Dir -> Query r ()
+order_ :: Exp SqlTag Dir -> Query ()
 order_ cond = modify $ \s -> s { qOrder = addClause cond (qOrder s) }
 
-having_ :: Exp SqlTag Bool -> Query r ()
+having_ :: Exp SqlTag Bool -> Query ()
 having_ cond = modify $ \s -> s { qHaving = addClause cond (qHaving s) }
 
-group_ :: Field a => Exp SqlTag a -> Query r ()
+group_ :: Field a => Exp SqlTag a -> Query ()
 group_ cond = modify $ \s -> s { qGroup = addClause (GroupExp cond) (qGroup s) }
 
 addClause :: Monoid (Exp SqlTag a)
@@ -442,7 +442,7 @@ desc :: Field a => Exp SqlTag a -> Exp t Dir
 desc = DirExp Desc
 
 
-on_ :: Exp SqlTag Bool -> Query r ()
+on_ :: Exp SqlTag Bool -> Query ()
 on_ cond = modify $ \s -> s { qFrom = intoLastFree (qFrom s) (renderPrim cond) }
     where
         intoLastFree :: ActiveJoin -> String -> ActiveJoin
