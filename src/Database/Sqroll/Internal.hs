@@ -21,6 +21,8 @@ module Database.Sqroll.Internal
     , sqrollOpen
     , sqrollOpenWith
     , sqrollClose
+    , withSqroll
+    , withSqrollWith
     , sqrollCheckpoint
 
     , sqrollTransaction
@@ -49,6 +51,7 @@ module Database.Sqroll.Internal
 
 import Control.Applicative (pure, (<$>), (<*>), (<$))
 import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
+import Control.Exception (bracket)
 import Control.Monad (unless)
 import Control.Monad.Trans (MonadIO, liftIO)
 import Data.HashMap.Lazy (HashMap)
@@ -302,6 +305,19 @@ data Sqroll = Sqroll
 -- | Open sqroll log with sefault settings
 sqrollOpen :: FilePath -> IO Sqroll
 sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
+
+-- | @'withSqroll' path act@ opens a sqroll database using 'sqrollOpen' and passes
+-- the resulting handle to the computation @act@.  The handle will be
+-- closed on exit from 'withSqroll', whether by normal termination or by
+-- raising an exception.  If closing the handle raises an exception, then
+-- this exception will be raised by 'withSqroll' rather than any exception
+-- raised by 'act'.
+withSqroll :: FilePath -> (Sqroll -> IO a) -> IO a
+withSqroll path = withSqrollWith path sqlDefaultOpenFlags
+
+-- | Same as @'withSqroll' with custom settings.
+withSqrollWith :: FilePath -> [SqlOpenFlag] -> (Sqroll -> IO a) -> IO a
+withSqrollWith flags filename = bracket (sqrollOpenWith flags filename) sqrollClose
 
 -- | Open sqroll log with custom settings
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
