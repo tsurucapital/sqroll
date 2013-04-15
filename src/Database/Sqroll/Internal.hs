@@ -51,9 +51,11 @@ module Database.Sqroll.Internal
 
 import Control.Applicative (pure, (<$>), (<*>), (<$))
 import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
-import Control.Exception (bracket)
+import Control.Exception.Lifted (bracket)
 import Control.Monad (unless)
+import Control.Monad.Base (liftBase)
 import Control.Monad.Trans (MonadIO, liftIO)
+import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HM
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -312,12 +314,12 @@ sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 -- raising an exception.  If closing the handle raises an exception, then
 -- this exception will be raised by 'withSqroll' rather than any exception
 -- raised by 'act'.
-withSqroll :: FilePath -> (Sqroll -> IO a) -> IO a
+withSqroll :: (MonadBaseControl IO m) => FilePath -> (Sqroll -> m a) -> m a
 withSqroll path = withSqrollWith path sqlDefaultOpenFlags
 
 -- | Same as @'withSqroll' with custom settings.
-withSqrollWith :: FilePath -> [SqlOpenFlag] -> (Sqroll -> IO a) -> IO a
-withSqrollWith flags filename = bracket (sqrollOpenWith flags filename) sqrollClose
+withSqrollWith :: (MonadBaseControl IO m) => FilePath -> [SqlOpenFlag] -> (Sqroll -> m a) -> m a
+withSqrollWith flags filename = bracket (liftBase $ sqrollOpenWith flags filename) (liftBase . sqrollClose)
 
 -- | Open sqroll log with custom settings
 sqrollOpenWith :: FilePath -> [SqlOpenFlag] -> IO Sqroll
