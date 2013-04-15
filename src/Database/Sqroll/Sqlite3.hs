@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, ForeignFunctionInterface, ExistentialQuantification, DeriveDataTypeable #-}
 module Database.Sqroll.Sqlite3
     ( Sql
     , SqlStmt
@@ -49,9 +49,15 @@ module Database.Sqroll.Sqlite3
     , sqlGetRowId
 
     , sqlTableColumns
+
+    , SqliteException (..)
+    , SqliteErrorType (..)
+    , isSqliteException
+    , sqliteStatusToException
     ) where
 
 import Control.Applicative ((<$>))
+import Control.Exception (Exception, SomeException, fromException, throwIO)
 import Control.Monad (when)
 import Data.Bits ((.|.))
 import Data.ByteString (ByteString)
@@ -61,9 +67,11 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Int (Int64)
 import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.List (foldl')
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
+import Data.Typeable (Typeable)
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -395,7 +403,7 @@ sqlTableColumns sql tableName = do
 
 orDie :: String -> SqlStatus -> IO ()
 orDie _   0 = return ()
-orDie msg s = error $ msg ++ ": " ++ showStatus s
+orDie msg s = throwIO $ sqliteStatusToException s (msg ++ ": " ++ showStatus s)
 {-# INLINE orDie #-}
 
 showStatus :: SqlStatus -> String
@@ -429,3 +437,75 @@ showStatus 26 = "File opened that is not a database file"
 showStatus 100 = "sqlite3_step() has another row ready"
 showStatus 101 = "sqlite3_step() has finished executing"
 showStatus _ = "Unknown error code"
+
+
+-- TODO niklas is this good or should it be SqliteException = ... | ... | ...
+-- | A generic sqlite exception.
+data SqliteException = SqliteException SqliteErrorType String deriving (Show, Typeable)
+
+instance Exception SqliteException
+
+isSqliteException :: SomeException -> Bool
+isSqliteException e = isJust (fromException e :: Maybe SqliteException)
+
+
+data SqliteErrorType = SqliteError
+                     | SqliteInternal
+                     | SqlitePerm
+                     | SqliteAbort
+                     | SqliteBusy
+                     | SqliteLocked
+                     | SqliteNoMem
+                     | SqliteReadOnly
+                     | SqliteInterrupt
+                     | SqliteIOErr
+                     | SqliteCorrupt
+                     | SqliteNotFound
+                     | SqliteFull
+                     | SqliteCantOpen
+                     | SqliteProtocol
+                     | SqliteEmpty
+                     | SqliteSchema
+                     | SqliteTooBig
+                     | SqliteConstraint
+                     | SqliteMismatch
+                     | SqliteMisuse
+                     | SqliteNoLFS
+                     | SqliteAuth
+                     | SqliteFormat
+                     | SqliteRange
+                     | SqliteNotADB
+                     | SqliteUnknownError
+                     deriving (Eq, Show, Enum, Ord)
+
+
+-- To be held in sync with "Result Codes" from sqlite3.h.
+sqliteStatusToException :: SqlStatus -> String -> SqliteException
+sqliteStatusToException errCode msg = case errCode of
+    1  -> SqliteException SqliteError        msg
+    2  -> SqliteException SqliteInternal     msg
+    3  -> SqliteException SqlitePerm         msg
+    4  -> SqliteException SqliteAbort        msg
+    5  -> SqliteException SqliteBusy         msg
+    6  -> SqliteException SqliteLocked       msg
+    7  -> SqliteException SqliteNoMem        msg
+    8  -> SqliteException SqliteReadOnly     msg
+    9  -> SqliteException SqliteInterrupt    msg
+    10 -> SqliteException SqliteIOErr        msg
+    11 -> SqliteException SqliteCorrupt      msg
+    12 -> SqliteException SqliteNotFound     msg
+    13 -> SqliteException SqliteFull         msg
+    14 -> SqliteException SqliteCantOpen     msg
+    15 -> SqliteException SqliteProtocol     msg
+    16 -> SqliteException SqliteEmpty        msg
+    17 -> SqliteException SqliteSchema       msg
+    18 -> SqliteException SqliteTooBig       msg
+    19 -> SqliteException SqliteConstraint   msg
+    20 -> SqliteException SqliteMismatch     msg
+    21 -> SqliteException SqliteMisuse       msg
+    22 -> SqliteException SqliteNoLFS        msg
+    23 -> SqliteException SqliteAuth         msg
+    24 -> SqliteException SqliteFormat       msg
+    25 -> SqliteException SqliteRange        msg
+    26 -> SqliteException SqliteNotADB       msg
+    _  -> SqliteException SqliteUnknownError msg
