@@ -51,11 +51,8 @@ Library
     template-haskell
 
 Test-suite sqroll-tests
-  C-sources:      cbits/sqroll.c,
-                  cbits/sqlite3.c
-  Include-dirs:   cbits
   Ghc-options:    -Wall
-  Hs-source-dirs: src tests
+  Hs-source-dirs: tests
   Main-is:        TestSuite.hs
   Type:           exitcode-stdio-1.0
 
@@ -69,18 +66,12 @@ Test-suite sqroll-tests
     Database.Sqroll.Tests.Types
 
   Build-depends:
-    HUnit                >= 1.2 && < 1.3,
-    test-framework       >= 0.4 && < 0.7,
-    test-framework-hunit >= 0.2 && < 0.3,
-    -- Copied from regular dependencies...
+    sqroll,
     base                 >= 4   && < 5,
     bytestring           >= 0.9 && < 0.11,
     directory            >= 1.1 && < 1.3,
     filepath             >= 1.3 && < 1.4,
-    ghc-prim             >= 0.2 && < 0.4,
-    mtl                  >= 2.0 && < 2.2,
-    old-locale           >= 1.0 && < 1.1,
-    time                 >= 1.4 && < 1.5,
-    unordered-containers >= 0.2 && < 0.3,
-    text                 >= 0.11 && < 0.12,
-    template-haskell
+    HUnit                >= 1.2 && < 1.3,
+    test-framework       >= 0.4 && < 0.9,
+    test-framework-hunit >= 0.2 && < 0.4,
+    text                 >= 0.11 && < 0.12
