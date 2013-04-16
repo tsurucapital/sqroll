@@ -439,7 +439,6 @@ showStatus 101 = "sqlite3_step() has finished executing"
 showStatus _ = "Unknown error code"
 
 
--- TODO niklas is this good or should it be SqliteException = ... | ... | ...
 -- | A generic sqlite exception.
 data SqliteException = SqliteException SqliteErrorType String deriving (Show, Typeable)
 
