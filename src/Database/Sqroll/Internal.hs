@@ -116,6 +116,10 @@ newtype IStmt a = IStmt (SqlFStmt, SqlStmt -> a -> IO ())
 newtype Stmt a b = Stmt { unStmt :: (SqlFStmt, SqlStmt -> IO (Maybe a)) }
 
 
+instance Show (Stmt a b) where
+    show _ = "Sqroll Stmt"
+
+
 data Entity a
     = Entity
     { entityKey :: (Key a)
