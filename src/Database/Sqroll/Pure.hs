@@ -8,16 +8,20 @@ import Data.IORef (IORef, readIORef, modifyIORef)
 
 import Database.Sqroll
 
--- | Describes logging in a pure way
+-- | Describes logging in a pure way.
+--
+-- * Log: Simple insertion
+--
+-- * LogKey: Insertion depending on a foreign key
+--
+-- * LogKeyCache: Insertion depending on cached foreign keys
+--
 data Log c where
-    -- | Simple insertion
     Log :: HasTable a => a -> Log c
 
-    -- | Insertion depending on a foreign key
     LogKey
         :: HasTable b => b -> (Key b -> [Log c]) -> Log c
 
-    -- | Insertion depending on cached foreign keys
     LogKeyCache
         :: HasTable b
         => b
