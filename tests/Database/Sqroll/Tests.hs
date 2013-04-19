@@ -11,6 +11,7 @@ import Control.Applicative
 import Control.Arrow
 import Data.ByteString.Char8 ()
 import qualified Data.Text as T
+import System.Mem (performGC)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
@@ -41,6 +42,7 @@ tests = testGroup "Database.Sqroll.Tests"
     , testCase "testRebindKey"       testRebindKey
     , testCase "testCustomQuery"     testCustomQuery
     , testCase "testCustomQueryNT"   testCustomQueryNT
+    , testCase "testGCAfterClose"    testGCAfterClose
     ]
 
 testAppendTailUsers :: Assertion
@@ -226,3 +228,18 @@ testCustomQueryNT = withTmpSqroll $ \sqroll -> do
 
     dogs' <- sqrollGetList stmt
     (filter ((==) (Just "foo10") . kittenWoof . unDog) dogs) @=? dogs'
+
+
+testGCAfterClose :: Assertion
+testGCAfterClose = do
+    stmt <- withTmpSqroll $ \sqroll -> do
+        let user = User "John" "Doe" 32 "kittens"
+        sqrollAppend_ sqroll user
+
+        makeSelectStatement sqroll (Just user)
+
+    -- Check if GC after close crashes sqroll.
+    performGC
+
+    -- Keep reference to stmt so that it doesn't get GC'd earlier than this.
+    -- print stmt
