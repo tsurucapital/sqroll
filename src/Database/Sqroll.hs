@@ -11,9 +11,11 @@ module Database.Sqroll
     , Sqroll
     , Stmt
     , sqrollOpen
+    , sqrollOpenReadOnly
     , sqrollOpenWith
     , sqrollClose
     , withSqroll
+    , withSqrollReadOnly
     , withSqrollWith
     , sqrollCheckpoint
 

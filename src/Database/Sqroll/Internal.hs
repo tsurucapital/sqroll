@@ -19,9 +19,11 @@ module Database.Sqroll.Internal
 
     , Sqroll (sqrollSql)
     , sqrollOpen
+    , sqrollOpenReadOnly
     , sqrollOpenWith
     , sqrollClose
     , withSqroll
+    , withSqrollReadOnly
     , withSqrollWith
     , sqrollCheckpoint
 
@@ -308,11 +310,23 @@ data Sqroll = Sqroll
     , sqrollCache      :: IORef (HashMap String (SqrollCache ()))
     }
 
--- | Open sqroll log with sefault settings
+-- | Open sqroll log with sefault settings.
+--
+-- For most cases, it is recommended to use 'withSqroll' instead,
+-- which guarantees properly closing the database, even in the
+-- presence of exceptions.
+--
+-- If you do not need to write to the database, prefer 'sqrollOpenReadOnly'
+-- / 'withSqrollReadOnly' to prevent SQLite from creating @-shm@ and @-wal@
+-- files.
 sqrollOpen :: FilePath -> IO Sqroll
 sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 
--- | @'withSqroll' path act@ opens a sqroll database using 'sqrollOpen' and passes
+-- | Same as @'sqrollOpen' filePath ['SqlOpenReadOnly']@. See 'sqrollOpen' for benefits.
+sqrollOpenReadOnly :: FilePath -> IO Sqroll
+sqrollOpenReadOnly filePath = sqrollOpenWith filePath [SqlOpenReadOnly]
+
+-- | @withSqroll path act@ opens a sqroll database using 'sqrollOpen' and passes
 -- the resulting handle to the computation @act@.  The handle will be
 -- closed on exit from 'withSqroll', whether by normal termination or by
 -- raising an exception.  If closing the handle raises an exception, then
@@ -321,7 +335,11 @@ sqrollOpen filePath = sqrollOpenWith filePath sqlDefaultOpenFlags
 withSqroll :: (MonadBaseControl IO m) => FilePath -> (Sqroll -> m a) -> m a
 withSqroll path = withSqrollWith path sqlDefaultOpenFlags
 
--- | Same as @'withSqroll' with custom settings.
+-- | Same as @'withSqrollReadOnly' filePath ['SqlOpenReadOnly'] action@. See 'sqrollOpen' for benefits.
+withSqrollReadOnly :: (MonadBaseControl IO m) => FilePath -> (Sqroll -> m a) -> m a
+withSqrollReadOnly path = withSqrollWith path [SqlOpenReadOnly]
+
+-- | Same as withSqroll with custom settings.
 withSqrollWith :: (MonadBaseControl IO m) => FilePath -> [SqlOpenFlag] -> (Sqroll -> m a) -> m a
 withSqrollWith flags filename = bracket (liftBase $ sqrollOpenWith flags filename) (liftBase . sqrollClose)
 
