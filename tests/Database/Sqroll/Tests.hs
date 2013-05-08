@@ -11,12 +11,14 @@ import Control.Applicative
 import Control.Arrow
 import Data.ByteString.Char8 ()
 import qualified Data.Text as T
+import Foreign.ForeignPtr (touchForeignPtr)
 import System.Mem (performGC)
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (Assertion, (@=?))
 
 import Database.Sqroll
+import qualified Database.Sqroll.Internal as Internal
 import qualified Database.Sqroll.Tests.ModifiedTypes as ModifiedTypes
 import Database.Sqroll.Table
 import Database.Sqroll.Tests.Types
@@ -242,4 +244,5 @@ testGCAfterClose = do
     performGC
 
     -- Keep reference to stmt so that it doesn't get GC'd earlier than this.
-    -- print stmt
+    let Internal.Stmt (sqlFStmt, _) = stmt
+    touchForeignPtr sqlFStmt
