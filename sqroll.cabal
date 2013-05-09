@@ -27,6 +27,7 @@ Library
     Database.Sqroll.Internal
     Database.Sqroll.Pure
     Database.Sqroll.Sqlite3
+    Database.Sqroll.Sqlite3Constants
     Database.Sqroll.Table
     Database.Sqroll.Table.Field
     Database.Sqroll.Table.Field.Unique

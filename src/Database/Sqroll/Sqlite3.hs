@@ -80,6 +80,9 @@ import Foreign.Ptr
 import Foreign.Storable
 import System.Mem (performGC)
 
+import Database.Sqroll.Sqlite3Constants
+
+
 -- | Pointer to the db handle itself, can be used as is
 type Sql = Ptr ()
 
@@ -265,10 +268,11 @@ foreign import ccall unsafe "sqlite3.h sqlite3_bind_text" sqlite3_bind_text
 
 sqlBindString :: SqlStmt -> Int -> String -> IO ()
 sqlBindString stmt n string = withCStringLen string $ \(cstr, len) ->
-    -- The nullPtr we pass here is the destructor for the text we bind. We use
-    -- a nullPtr since Haskell will take care of the free'ing (through
-    -- withCStringLen).
-    sqlite3_bind_text stmt (fromIntegral n) cstr (fromIntegral len) nullPtr >>=
+    -- Pass in SQLITE_TRANSIENT to make sure a copy is made of string on the sqlite side.
+    -- Otherwise it is possible that GC frees the string the statement will be based on,
+    -- even though we use withCStringLen as sqlite would rely on string to exist outside
+    -- of its scope.
+    sqlite3_bind_text stmt (fromIntegral n) cstr (fromIntegral len) sqlite3TransientPtr >>=
         orDie "sqlite3_bind_text"
 {-# INLINE sqlBindString #-}
 
@@ -277,8 +281,12 @@ foreign import ccall unsafe "sqlite3.h sqlite3_bind_blob" sqlite3_bind_blob
 
 sqlBindByteString :: SqlStmt -> Int -> ByteString -> IO ()
 sqlBindByteString stmt n bs = withForeignPtr fptr $ \ptr ->
+    -- Pass in SQLITE_TRANSIENT to make sure a copy is made of string on the sqlite side.
+    -- Otherwise it is possible that GC frees the string the statement will be based on,
+    -- even though we use withForeignPtr as sqlite would rely on string to exist outside
+    -- of its scope.
     sqlite3_bind_blob
-        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) nullPtr >>=
+        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) sqlite3TransientPtr >>=
             orDie "sqlite3_bind_blob"
   where
     (fptr, o, l) = BI.toForeignPtr bs
@@ -291,8 +299,12 @@ sqlBindLazyByteString stmt n lbs = sqlBindByteString stmt n $
 
 sqlBindText :: SqlStmt -> Int -> Text -> IO ()
 sqlBindText stmt n text = withForeignPtr fptr $ \ptr ->
+    -- Pass in SQLITE_TRANSIENT to make sure a copy is made of string on the sqlite side.
+    -- Otherwise it is possible that GC frees the string the statement will be based on,
+    -- even though we use withForeignPtr as sqlite would rely on string to exist outside
+    -- of its scope.
     sqlite3_bind_text
-        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) nullPtr >>=
+        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) sqlite3TransientPtr >>=
             orDie "sqlite3_bind_text"
   where
     bs           = T.encodeUtf8 text
