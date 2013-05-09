@@ -280,16 +280,14 @@ foreign import ccall unsafe "sqlite3.h sqlite3_bind_blob" sqlite3_bind_blob
     :: SqlStmt -> CInt -> Ptr () -> CInt -> Ptr () -> IO SqlStatus
 
 sqlBindByteString :: SqlStmt -> Int -> ByteString -> IO ()
-sqlBindByteString stmt n bs = withForeignPtr fptr $ \ptr ->
+sqlBindByteString stmt n bs = B.useAsCStringLen bs $ \(cstr, len) ->
     -- Pass in SQLITE_TRANSIENT to make sure a copy is made of string on the sqlite side.
     -- Otherwise it is possible that GC frees the string the statement will be based on,
     -- even though we use withForeignPtr as sqlite would rely on string to exist outside
     -- of its scope.
     sqlite3_bind_blob
-        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) sqlite3TransientPtr >>=
+        stmt (fromIntegral n) (castPtr cstr) (fromIntegral len) sqlite3TransientPtr >>=
             orDie "sqlite3_bind_blob"
-  where
-    (fptr, o, l) = BI.toForeignPtr bs
 {-# INLINE sqlBindByteString #-}
 
 sqlBindLazyByteString :: SqlStmt -> Int -> BL.ByteString -> IO ()
@@ -298,17 +296,16 @@ sqlBindLazyByteString stmt n lbs = sqlBindByteString stmt n $
 {-# INLINE sqlBindLazyByteString #-}
 
 sqlBindText :: SqlStmt -> Int -> Text -> IO ()
-sqlBindText stmt n text = withForeignPtr fptr $ \ptr ->
+sqlBindText stmt n text = B.useAsCStringLen bs $ \(cstr, len) ->
     -- Pass in SQLITE_TRANSIENT to make sure a copy is made of string on the sqlite side.
     -- Otherwise it is possible that GC frees the string the statement will be based on,
     -- even though we use withForeignPtr as sqlite would rely on string to exist outside
     -- of its scope.
     sqlite3_bind_text
-        stmt (fromIntegral n) (ptr `plusPtr` o) (fromIntegral l) sqlite3TransientPtr >>=
+        stmt (fromIntegral n) cstr (fromIntegral len) sqlite3TransientPtr >>=
             orDie "sqlite3_bind_text"
   where
-    bs           = T.encodeUtf8 text
-    (fptr, o, l) = BI.toForeignPtr bs
+    bs = T.encodeUtf8 text
 {-# INLINE sqlBindText #-}
 
 sqlBindLazyText :: SqlStmt -> Int -> TL.Text -> IO ()
