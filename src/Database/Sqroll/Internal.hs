@@ -169,11 +169,10 @@ makeSqrollCacheFor sqroll defaultRecord = do
 mkSelectPeek :: NamedTable a -> SqlStmt -> IO (Maybe a)
 mkSelectPeek table' stmt = do
         hasData <- sqlStep stmt
-        r <- if hasData
+        if hasData
             then Just <$> tablePeek table' stmt
             else do sqlReset stmt
                     return Nothing
-        return r
 
 -- | Make a statement to select every item of the given type
 --
