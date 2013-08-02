@@ -44,6 +44,7 @@ module Database.Sqroll.Sqlite3
     , sqlColumnText
     , sqlColumnLazyText
     , sqlColumnIsNothing
+    , sqlColumnType
 
     , sqlLastInsertRowId
     , sqlGetRowId
@@ -54,6 +55,7 @@ module Database.Sqroll.Sqlite3
     , SqliteErrorType (..)
     , isSqliteException
     , sqliteStatusToException
+    , ColumnType (..)
     ) where
 
 import Control.Applicative ((<$>))
@@ -128,6 +130,15 @@ data SqlOpenFlag
     | SqlOpenCreate
     | SqlOpenWal
     deriving (Eq, Show)
+
+data ColumnType
+    = IntColumn
+    | FloatColumn
+    | TextColumn
+    | BlobColumn
+    | NullColumn
+    deriving (Eq, Ord, Show)
+
 
 sqlDefaultOpenFlags :: [SqlOpenFlag]
 sqlDefaultOpenFlags = [SqlOpenReadWrite, SqlOpenCreate, SqlOpenWal]
@@ -394,6 +405,18 @@ sqlColumnIsNothing stmt n = do
     t <- sqlite3_column_type stmt (fromIntegral n)
     return $ t == 5  -- SQLITE_NULL
 {-# INLINE sqlColumnIsNothing #-}
+
+sqlColumnType :: SqlStmt -> Int -> IO ColumnType
+sqlColumnType stmt n = toColumnType <$> sqlite3_column_type stmt (fromIntegral n)
+    where
+        toColumnType :: CInt -> ColumnType
+        toColumnType 1 = IntColumn
+        toColumnType 2 = FloatColumn
+        toColumnType 3 = TextColumn
+        toColumnType 4 = BlobColumn
+        toColumnType 5 = NullColumn
+        toColumnType _ = error "WAT?"
+{-# INLINE sqlColumnType #-}
 
 sqlLastInsertRowId :: Sql -> IO SqlRowId
 sqlLastInsertRowId = fmap fromIntegral . sqlite3_last_insert_rowid
