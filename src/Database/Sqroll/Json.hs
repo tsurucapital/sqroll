@@ -4,43 +4,49 @@ module Database.Sqroll.Json
     )
     where
 
-import Control.Applicative
 import Database.Sqroll.Internal
 import Database.Sqroll.Sqlite3
+import Data.ByteString.Base64 as Base64
 import Data.Text (Text)
 import Data.List (intercalate)
 import Data.Aeson
-import Data.Aeson.Types
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 
-makeSelectBlob :: Sqroll -> String -> IO (Stmt Value Value)
-makeSelectBlob s t = makeSelectBlobCond s t Nothing
+makeSelectBlob :: Sqroll -> Bool -> String -> IO (Stmt Value Value)
+makeSelectBlob s v t = makeSelectBlobCond s v t Nothing
 
-makeSelectBlobCond :: Sqroll -> String -> Maybe String -> IO (Stmt Value Value)
-makeSelectBlobCond sqroll blobTable m'cond = do
+makeSelectBlobCond :: Sqroll -> Bool -> String -> Maybe String -> IO (Stmt Value Value)
+makeSelectBlobCond sqroll verbose blobTable m'cond = do
         let sql = sqrollSql sqroll
         columns <- sqlTableColumns sql blobTable
         let selectItems = "[" ++ (intercalate "], [" columns) ++ "]"
             cond = maybe "" (" WHERE " ++) m'cond
             request = "SELECT " ++ selectItems ++ " FROM [" ++ blobTable ++ "]" ++ cond
+            nc = length columns
         stmt  <- sqlPrepare sql request
-        return (Stmt (stmt, peekBlob (map T.pack columns)))
+        return (Stmt (stmt, peekBlob (map T.pack columns) nc))
     where
-        peekBlob :: [Text] -> SqlStmt -> IO (Maybe Value)
-        peekBlob cols stmt = do
+        peekBlob :: [Text] -> Int -> SqlStmt -> IO (Maybe Value)
+        peekBlob cols nc stmt = do
                 hasData <- sqlStep stmt
                 if hasData
-                    then (Just . object) <$> mapM peekBlobField (zip cols [0..])
+                    then do vals <- mapM peekBlobField [0 .. nc-1]
+                            return $ if verbose
+                                then (Just . object) $ zipWith (.=) cols vals
+                                else (Just . toJSON) vals
                     else do sqlReset stmt
                             return Nothing
             where
-                peekBlobField :: (Text, Int) -> IO Pair
-                peekBlobField (colName, colNum) = do
+                encByteString = T.decodeLatin1 . Base64.encode
+
+                peekBlobField :: Int -> IO Value
+                peekBlobField colNum = do
                     colType <- sqlColumnType stmt colNum
                     case colType of
-                        IntColumn   -> ((.=) colName) <$> sqlColumnInt64      stmt colNum
-                        FloatColumn -> ((.=) colName) <$> sqlColumnDouble     stmt colNum
-                        TextColumn  -> ((.=) colName) <$> sqlColumnText       stmt colNum
-                        BlobColumn  -> ((.=) colName) <$> sqlColumnByteString stmt colNum
-                        NullColumn  -> return (colName .= ())
+                        IntColumn   -> toJSON <$> sqlColumnInt64  stmt colNum
+                        FloatColumn -> toJSON <$> sqlColumnDouble stmt colNum
+                        TextColumn  -> toJSON <$> sqlColumnText   stmt colNum
+                        BlobColumn  -> (toJSON . encByteString) <$> sqlColumnByteString stmt colNum
+                        NullColumn  -> return Null

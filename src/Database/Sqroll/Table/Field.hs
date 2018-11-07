@@ -11,7 +11,6 @@ module Database.Sqroll.Table.Field
     , HString (..)
     ) where
 
-import Control.Applicative ((<$>), (<*>))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL

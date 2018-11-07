@@ -3,8 +3,6 @@ module Database.Sqroll.Table.Field.Unique
     ( Unique (..)
     ) where
 
-import Control.Applicative ((<$>))
-
 import Database.Sqroll.Table.Field
 
 newtype Unique a = Unique {unUnique :: a}

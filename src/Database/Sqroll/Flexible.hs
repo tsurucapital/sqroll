@@ -1,5 +1,6 @@
 {-# OPTIONS -Wall #-}
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -31,9 +32,7 @@ module Database.Sqroll.Flexible
     ) where
 
 import Control.Arrow (first)
-import Control.Applicative (Applicative (..))
 import Control.Monad.State
-import Data.Monoid
 import Data.Char (toUpper)
 import Data.List (intercalate)
 
@@ -46,10 +45,10 @@ import Database.Sqroll.Sqlite3
 import Foreign.ForeignPtr
 
 
-import Language.Haskell.TH hiding (Stmt, Exp, runQ)
+import Language.Haskell.TH hiding (Stmt, Exp, runQ, prim)
 
 newtype Query a = Query { runQ :: State QData a }
-    deriving (Monad, MonadState QData)
+    deriving (Functor, Applicative, Monad, MonadState QData)
 
 {- {{{
 
@@ -325,7 +324,7 @@ data Exp t a where
     TableExp  :: HasTable full => NamedTable full -> TableInstance (NamedTable full) -> Exp t full
     MTableExp :: HasTable full => NamedTable full -> TableInstance (NamedTable full) -> Exp t (Maybe full)
     DbValue   :: Field a => String -> Exp t a
-    
+
     -- math
     AddExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
     SubExp    :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
@@ -394,13 +393,22 @@ instance Applicative (Exp HaskTag) where
     pure  = Pure
     (<*>) = App
 
+instance Semigroup (Exp SqlTag Bool) where
+    (<>) = (&&.)
+
 instance Monoid (Exp SqlTag Bool) where
     mappend a b = a &&. b
     mempty = var True
 
+instance Semigroup (Exp SqlTag Dir) where
+    (<>) = CommaExp
+
 instance Monoid (Exp SqlTag Dir) where
     mappend a b = a `CommaExp` b
     mempty = asc $ var True
+
+instance Semigroup (Exp SqlTag GroupBy) where
+    (<>) = CommaExp
 
 instance Monoid (Exp SqlTag GroupBy) where
     mappend a b = a `CommaExp` b
@@ -422,7 +430,7 @@ data TableInstance t = TableInstance Int deriving Show
 type family Component full tag
 
 class IsTag tag where
-    type Full t
+    type Full tag
     getTagName :: tag -> String
 
 (*.) :: Field a => Exp SqlTag a -> Exp SqlTag a -> Exp t a
@@ -547,7 +555,7 @@ on_ cond = modify $ \s -> s { qFrom = intoLastFree (qFrom s) (renderPrim cond) }
         intoLastFree LastJoin{} _ = error "no cond?"
         intoLastFree j c | isLast j = j { joinCondition = Just c }
         intoLastFree j c = j { joinTo = intoLastFree (joinTo j) c }
-        
+
         isLast :: ActiveJoin -> Bool
         isLast (NextJoin _ _ _ _ (NextJoin _ _ _ (Just _) _)) = True
         isLast (NextJoin _ _ _ _ (LastJoin{})) = True
@@ -746,10 +754,10 @@ deriveExtendedQueries typeName = do
         typeInfo <- reify typeName
 
         case typeInfo of
-            TyConI (DataD _ name _ [constr] _) ->
+            TyConI (DataD _ name _ _ [constr] _) ->
                 return $ mkDecls Nothing name (getPrimFields constr)
 
-            TyConI (NewtypeD _ name _ ntConstr _) -> do
+            TyConI (NewtypeD _ name _ _ ntConstr _) -> do
                 (cName, constr) <- unpackNTConstr ntConstr
                 return $ mkDecls (Just name) cName (getPrimFields constr)
 
@@ -765,7 +773,7 @@ deriveExtendedQueries typeName = do
         unpackNTConstr (RecC _ [(_, _, ConT underlyingType)]) = do
             typeInfo <- reify underlyingType
             case typeInfo of
-                TyConI (DataD _ name _ [constr] _) -> return (name, constr)
+                TyConI (DataD _ name _ _ [constr] _) -> return (name, constr)
                 _ -> error invalid
         unpackNTConstr _ = error invalid
 
@@ -778,23 +786,31 @@ deriveExtendedQueries typeName = do
 
         mkTagType :: Maybe Name -> Name -> Dec
         mkTagType mNewType name = let name' = preNT mNewType name
-                                  in DataD [] name' [] [NormalC name' []] []
+                                  in DataD [] name' [] Nothing [NormalC name' []] []
 
         mkCompInst :: Maybe Name -> Name -> (Name, Type) -> Dec
         mkCompInst mNewType dName (fName, t) =
             let name' = preNT mNewType fName
                 base' = maybe dName id mNewType
-            in TySynInstD ''Component [ConT base', ConT name'] t
+            in TySynInstD ''Component
+#if MIN_VERSION_template_haskell(2, 9, 0)
+                  $ TySynEqn
+#endif
+                      [ConT base', ConT name'] t
 
         mkTagInst :: Maybe Name -> Name -> Name -> Dec
         mkTagInst mNewType pref acc =
             let name' = preNT mNewType (toConstrName $ nameBase acc)
                 base' = maybe pref id mNewType
                 iType = ConT ''IsTag `AppT` ConT name'
-                decTp = TySynInstD ''Full [ConT name'] (ConT base')
+                decTp = TySynInstD ''Full
+#if MIN_VERSION_template_haskell(2, 9, 0)
+                        $ TySynEqn
+#endif
+                            [ConT name'] (ConT base')
                 body  = LitE . StringL $ makeFieldName (nameBase pref) (nameBase acc)
                 decFn = FunD 'getTagName [Clause [WildP] (NormalB body) []]
-            in InstanceD [] iType [decTp, decFn]
+            in InstanceD Nothing [] iType [decTp, decFn]
 
         getPrimFields :: Con -> [(String, Type)]
         getPrimFields constr =

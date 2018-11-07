@@ -31,11 +31,9 @@ module Database.Sqroll.Table
     , makeFieldNames
     ) where
 
-import Control.Applicative
 import Control.Arrow (first)
 import Control.Monad
 import Data.List (intercalate)
-import Data.Monoid (Monoid, mappend, mempty)
 
 import Database.Sqroll.Sqlite3
 import Database.Sqroll.Table.Field

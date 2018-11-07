@@ -34,6 +34,6 @@ initializeAllTablesDec = do
     [d| initializeAllTables :: Sqroll -> IO (); initializeAllTables = $(allTheExprs) |]
 
 fromAppT :: Dec -> Maybe ExpQ
-fromAppT (InstanceD _ (AppT (ConT cls) (ConT typName)) _) | cls == ''HasTable = Just $ sigE [|undefined|] (conT typName)
+fromAppT (InstanceD _ _ (AppT (ConT cls) (ConT typName)) _) | cls == ''HasTable = Just $ sigE [|undefined|] (conT typName)
 -- TODO: match on newtype and data instances
 fromAppT _  = Nothing

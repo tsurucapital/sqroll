@@ -58,7 +58,6 @@ module Database.Sqroll.Sqlite3
     , ColumnType (..)
     ) where
 
-import Control.Applicative ((<$>))
 import Control.Exception (Exception, SomeException, fromException, throwIO)
 import Control.Monad (when)
 import Data.Bits ((.|.))

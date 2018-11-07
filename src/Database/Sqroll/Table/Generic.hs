@@ -7,7 +7,6 @@ module Database.Sqroll.Table.Generic
     ( GNamedTable (..)
     ) where
 
-import Control.Applicative ((<$>), (<*>))
 import GHC.Generics
 
 import Database.Sqroll.Table

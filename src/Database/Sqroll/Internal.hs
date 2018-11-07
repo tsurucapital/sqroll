@@ -51,7 +51,6 @@ module Database.Sqroll.Internal
     , sqrollInitializeTable
     ) where
 
-import Control.Applicative (pure, (<$>), (<*>), (<$))
 import Control.Concurrent.MVar (MVar, newMVar, putMVar, takeMVar)
 import Control.Exception.Lifted (bracket)
 import Control.Monad (unless)
@@ -212,7 +211,7 @@ makeSelectByKeyStatement sqroll defaultRecord key = do
 
 -- | By default select statements return raw values.
 -- Use this to get Entires instead.
-sqrollSelectEntity :: HasTable a => Stmt a b -> Stmt (Entity a) b
+sqrollSelectEntity :: Stmt a b -> Stmt (Entity a) b
 sqrollSelectEntity (Stmt (stmt, peek)) = -- {{{
     let peek' s = do mVal <- peek s
                      case mVal of
@@ -227,7 +226,7 @@ sqrollSelectFromRowId :: Stmt a b -> Int64 -> IO ()
 sqrollSelectFromRowId (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlBindInt64 raw 1 i
 
 -- | Bind a new value for the foreign key specified in this statement
-sqrollRebindKey :: HasTable b => Stmt a (Key b) -> Int64 -> IO ()
+sqrollRebindKey :: Stmt a (Key b) -> Int64 -> IO ()
 sqrollRebindKey (Stmt (stmt, _)) i = withForeignPtr stmt $ \raw -> sqlBindInt64 raw 2 i
 
 -- | Get all available results from given statement as a one strict list
