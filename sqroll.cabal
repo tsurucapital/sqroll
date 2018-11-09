@@ -12,14 +12,13 @@ build-type:    Simple
 cabal-version: >= 1.8
 Extra-source-files: cbits/sqroll.h
 
+
 Library
-  C-sources:      cbits/sqroll.c,
-                  cbits/sqlite3.c
-  Include-dirs:   cbits
-  Includes:       sqlite3.h
+  pkgconfig-depends: sqlite3
   Hs-source-dirs: src
   Ghc-options:    -Wall
   Cc-options:     -Wall -DSQLITE_ENABLE_FTS3=1 -O3 -DNDEBUG=1 -Wno-unused-value
+
 
   Exposed-modules:
     Database.Sqroll
