@@ -14,6 +14,8 @@ Extra-source-files: cbits/sqroll.h
 
 
 Library
+  C-sources:      cbits/sqroll.c
+  Include-dirs:   cbits
   pkgconfig-depends: sqlite3
   Hs-source-dirs: src
   Ghc-options:    -Wall
