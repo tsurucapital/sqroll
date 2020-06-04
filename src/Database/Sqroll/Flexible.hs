@@ -1,6 +1,5 @@
 {-# OPTIONS -Wall #-}
 
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -755,12 +754,10 @@ deriveExtendedQueries typeName = do
 
         case typeInfo of
             TyConI (DataD _ name _ _ [constr] _) ->
-                return $ mkDecls Nothing name (getPrimFields constr)
-
+                mkDecls Nothing name (getPrimFields constr)
             TyConI (NewtypeD _ name _ _ ntConstr _) -> do
                 (cName, constr) <- unpackNTConstr ntConstr
-                return $ mkDecls (Just name) cName (getPrimFields constr)
-
+                mkDecls (Just name) cName (getPrimFields constr)
             _ -> error invalid
 
     where
@@ -777,40 +774,33 @@ deriveExtendedQueries typeName = do
                 _ -> error invalid
         unpackNTConstr _ = error invalid
 
-        mkDecls :: Maybe Name -> Name -> [(String, Type)] -> [Dec]
-        mkDecls mNewType name prim =
-                let tags = map (mkTagType mNewType . toConstrName . fst) prim
-                    compInsts = map (mkCompInst mNewType name . first toConstrName) prim
-                    tagInsts = map (mkTagInst mNewType name . mkName . fst) prim
-                in tags ++ compInsts ++ tagInsts
+        mkDecls :: Maybe Name -> Name -> [(String, Type)] -> Q [Dec]
+        mkDecls mNewType name prim = do
+            tags <- mapM (mkTagType mNewType . toConstrName . fst) prim
+            compInsts <- mapM (mkCompInst mNewType name . first toConstrName) prim
+            tagInsts <- mapM (mkTagInst mNewType name . mkName . fst) prim
+            return $ tags ++ concat compInsts ++ concat tagInsts
 
-        mkTagType :: Maybe Name -> Name -> Dec
-        mkTagType mNewType name = let name' = preNT mNewType name
-                                  in DataD [] name' [] Nothing [NormalC name' []] []
+        mkTagType :: Maybe Name -> Name -> DecQ
+        mkTagType mNewType name = do
+            let name' = preNT mNewType name
+            dataD (cxt []) name' [] Nothing [normalC name' []] []
 
-        mkCompInst :: Maybe Name -> Name -> (Name, Type) -> Dec
-        mkCompInst mNewType dName (fName, t) =
+        mkCompInst :: Maybe Name -> Name -> (Name, Type) -> Q [Dec]
+        mkCompInst mNewType dName (fName, t) = do
             let name' = preNT mNewType fName
                 base' = maybe dName id mNewType
-            in TySynInstD ''Component
-#if MIN_VERSION_template_haskell(2, 9, 0)
-                  $ TySynEqn
-#endif
-                      [ConT base', ConT name'] t
+            [d| type instance Component $(conT base') $(conT name') = $(pure t) |]
 
-        mkTagInst :: Maybe Name -> Name -> Name -> Dec
-        mkTagInst mNewType pref acc =
+        mkTagInst :: Maybe Name -> Name -> Name -> Q [Dec]
+        mkTagInst mNewType pref acc = do
             let name' = preNT mNewType (toConstrName $ nameBase acc)
                 base' = maybe pref id mNewType
-                iType = ConT ''IsTag `AppT` ConT name'
-                decTp = TySynInstD ''Full
-#if MIN_VERSION_template_haskell(2, 9, 0)
-                        $ TySynEqn
-#endif
-                            [ConT name'] (ConT base')
                 body  = LitE . StringL $ makeFieldName (nameBase pref) (nameBase acc)
-                decFn = FunD 'getTagName [Clause [WildP] (NormalB body) []]
-            in InstanceD Nothing [] iType [decTp, decFn]
+            [d| instance IsTag $(conT name') where
+                    type Full $(conT name') = $(conT base')
+                    getTagName _ = $(pure body)
+                |]
 
         getPrimFields :: Con -> [(String, Type)]
         getPrimFields constr =
