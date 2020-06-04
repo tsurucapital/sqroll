@@ -71,6 +71,8 @@ Test-suite sqroll-tests
     Database.Sqroll.Tests
     Database.Sqroll.Tests.ModifiedTypes
     Database.Sqroll.Tests.Types
+    Database.Sqroll.Flexible.Tests
+    Database.Sqroll.Tests.Util
 
   Build-depends:
     sqroll,
