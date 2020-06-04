@@ -38,13 +38,13 @@ Library
     Database.Sqroll.TH
 
   Build-depends:
-    aeson                >= 0.5 && < 1.5,
+    aeson                >= 0.5 && < 1.6,
     base                 >= 4.6 && < 5,
     base64-bytestring    >= 1   && < 2,
     bytestring           >= 0.9 && < 0.11,
     directory            >= 1.1 && < 1.4,
     filepath             >= 1.3 && < 1.5,
-    ghc-prim             >= 0.2 && < 0.6,
+    ghc-prim             >= 0.2 && < 0.7,
     lifted-base          >= 0.2 && < 0.3,
     monad-control        >= 0.3 && < 1.1,
     mtl                  >= 2.0 && < 2.4,
@@ -53,7 +53,7 @@ Library
     transformers-base    >= 0.4 && < 0.5,
     unordered-containers >= 0.2 && < 0.3,
     text                 >= 0.11 && < 1.4,
-    template-haskell
+    template-haskell     < 2.17
 
 Test-suite sqroll-tests
   Ghc-options:    -Wall
@@ -73,15 +73,15 @@ Test-suite sqroll-tests
 
   Build-depends:
     sqroll,
-    aeson                >= 0.5 && < 1.2,
+    aeson                >= 0.5 && < 1.6,
     base                 >= 4.7 && < 5,
     bytestring           >= 0.9 && < 0.11,
     directory            >= 1.1 && < 1.4,
-    filepath             >= 1.3 && < 1.4,
-    HUnit                >= 1.2 && < 1.3,
+    filepath             >= 1.3 && < 1.5,
+    HUnit                >= 1.2 && < 1.7,
     test-framework       >= 0.4 && < 0.9,
     test-framework-hunit >= 0.2 && < 0.4,
-    text                 >= 0.11 && < 1.2
+    text                 >= 0.11 && < 1.4
 
 Benchmark sqroll-benchmarks
   Ghc-options:    -Wall
@@ -92,8 +92,8 @@ Benchmark sqroll-benchmarks
   Build-depends:
     sqroll,
     base                 >= 4.7   && < 5,
-    criterion            >= 0.6 && < 0.7,
+    criterion            >= 1.0 && < 1.7,
     bytestring           >= 0.9 && < 0.11,
     directory            >= 1.1 && < 1.4,
-    filepath             >= 1.3 && < 1.4,
-    text                 >= 0.11 && < 1.2
+    filepath             >= 1.3 && < 1.5,
+    text                 >= 0.11 && < 1.4
