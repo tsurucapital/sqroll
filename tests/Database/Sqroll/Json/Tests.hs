@@ -42,6 +42,6 @@ testSelectBlob = withTmpSqroll $ \sqroll -> do
                        ]
         mapM_ (sqrollAppend sqroll) items
 
-        stmt <- makeSelectBlob sqroll "bacon"
+        stmt <- makeSelectBlob sqroll True "bacon"
         result <- sqrollGetList stmt
         expected @=? result

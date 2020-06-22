@@ -17,7 +17,7 @@ import Database.Sqroll.Pure
 import Database.Sqroll.Tests.Util
 
 tests :: Test
-tests = testGroup "Database.Sqroll.Tests"
+tests = testGroup "Database.Sqroll.Pure.Tests"
     [ testCase "testRunLog" testRunLog
     ]
 
